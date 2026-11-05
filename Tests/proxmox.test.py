@@ -41,7 +41,7 @@ elif name=='pct':
 '''
             for name in ['pveversion','pvesh','pvesm','pveam','pct','curl','dpkg-query','sleep']:
                 p=commands/name;p.write_text(mock);p.chmod(0o755)
-            script=(SOURCE/'scripts/install-proxmox.sh').read_text().replace('[[ -t 0 ]]','true')
+            script=(SOURCE/'scripts/install-proxmox.sh').read_text().replace('[[ -t 0 ]]','true').replace('[[ $EUID -eq 0 ]]','true')
             for original,new in [('/etc/pve',str(root/'etc/pve')),('/sys/class/net',str(root/'sys/class/net')),('/run/lock',str(root/'run/lock')),('/root/licentiekluis-',str(root/'host-root/licentiekluis-'))]:
                 script=script.replace(original,new)
             target=root/'installer.sh';target.write_text(script)
