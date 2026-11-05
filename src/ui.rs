@@ -93,7 +93,7 @@ impl App {
         match i {
             MAIL=>self.open_mail()?,
             NEW=>{if self.discard(){self.fill(None);}},SAVE=>self.save_license()?,DELETE=>self.delete_license()?,
-            COPY=>{let code=self.fields[CODE].text();clipboard_win::set_clipboard_string(&code)?;*self.copied.borrow_mut()=Some((Zeroizing::new(code),Instant::now()));},
+            COPY=>{let code=self.fields[CODE].text();clipboard_win::set_clipboard_string(&code).map_err(|e|anyhow::anyhow!("Kopiëren naar klembord mislukt: {e:?}"))?;*self.copied.borrow_mut()=Some((Zeroizing::new(code),Instant::now()));},
             SHOW=>{self.fields[CODE].set_password_char(None);self.revealed.set(Some(Instant::now()));},
             ADDPERSON|RENAME|DELPERSON=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.edit_person(i)?;},
             ADDINSTALL=>{let p=self.platform.selection_string().context("Kies een platform")?;self.draft_installs.borrow_mut().push(Installation{platform:p,device:self.fields[DEVICE].text()});self.render_installs();self.dirty.set(true);},
@@ -142,7 +142,7 @@ impl App {
         ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");let s=self.snapshot()?;
         let owner=self.people.selection().filter(|i|*i>0).and_then(|i|self.people_ids.borrow().get(i-1).copied());
         let mut entries:Vec<_>=s.entries.into_iter().filter(|e|e.kind=="license"&&!e.deleted&&(owner.is_none()||e.owner_id==owner)).collect();entries.sort_by_key(|e|e.name.to_lowercase());ensure!(!entries.is_empty(),"Geen licenties bij deze gebruiker");
-        self.mail_licenses.set_collection(entries.iter().map(|e|format!("{}  |  versie {}",e.name,e.software_version)).collect());*self.mail_entries.borrow_mut()=entries;*self.mail_draft.borrow_mut()=None;self.mail_preview.set_text("");self.modal.set(true);self.window.set_enabled(false);self.mail_window.set_visible(true);
+        self.mail_licenses.set_collection(entries.iter().map(|e|format!("{}  |  versie {}",e.name,e.software_version)).collect());*self.mail_entries.borrow_mut()=entries;*self.mail_draft.borrow_mut()=None;self.mail_preview.set_text("");self.modal.set(true);self.window.set_enabled(false);self.mail_window.set_visible(true);Ok(())
     }
     fn close_mail(&self){self.mail_window.set_visible(false);self.window.set_enabled(true);self.modal.set(false);self.mail_preview.set_text("");self.mail_to.set_text("");self.mail_entries.borrow_mut().clear();self.mail_licenses.clear();*self.mail_draft.borrow_mut()=None;}
     fn mail_event(&self,event:nwg::Event,handle:nwg::ControlHandle){
