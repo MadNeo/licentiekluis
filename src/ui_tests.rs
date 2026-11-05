@@ -25,7 +25,9 @@ unsafe fn reachable(handle: &nwg::ControlHandle) {
     let mut point = POINT { x: (rect.left+rect.right)/2, y: (rect.top+rect.bottom)/2 };
     ScreenToClient(parent, &mut point);
     let hit = ChildWindowFromPointEx(parent, point, CWP_SKIPINVISIBLE | CWP_SKIPTRANSPARENT);
-    assert_eq!(hit, hwnd, "Control is covered by a sibling window");
+    let mut parent_rect: RECT = mem::zeroed(); GetClientRect(parent, &mut parent_rect);
+    let mut caption=[0u16;256];let len=GetWindowTextW(hwnd,caption.as_mut_ptr(),256);
+    assert_eq!(hit, hwnd, "Control {:?} at ({},{}) outside/covered; parent client {}x{}",String::from_utf16_lossy(&caption[..len as usize]),point.x,point.y,parent_rect.right,parent_rect.bottom);
 }
 
 unsafe fn snapshot(hwnd: HWND, path: &std::path::Path) {
@@ -65,6 +67,7 @@ fn native_windows_show_text_and_unobstructed_controls() {
     std::fs::create_dir_all(&screenshots).unwrap();
     unsafe {
         paint_now(&app.window);
+        snapshot(app.window.handle.hwnd().unwrap(), &screenshots.join("00-before-check.bmp"));
         for field in &app.fields[..URL] { reachable(&field.handle); }
         for index in [UNLOCK,NEW,SAVE,DELETE,COPY,SHOW,ADDPERSON,RENAME,DELPERSON,ADDINSTALL,DELINSTALL,LOCK,MAIL,19] {
             reachable(&app.buttons[index].handle);
