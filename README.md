@@ -6,7 +6,7 @@ Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per ge
 
 Gebruik een **aparte Ubuntu 24.04 LTS x86_64 LXC** met systemd, een vast IP-adres en internet. Voer de commando's als root **in de container** uit. De installer maakt geen container aan op de Proxmox-host.
 
-De repository is priv�. Download `scripts/install-lxc.sh` via GitHub en kopieer het bestand naar `/root/install-lxc.sh` in de container. Start vervolgens:
+De repository is privé. Download `scripts/install-lxc.sh` via GitHub en kopieer het bestand naar `/root/install-lxc.sh` in de container. Start vervolgens:
 
 ```bash
 bash /root/install-lxc.sh
@@ -68,4 +68,3 @@ Installeer Rust en Visual Studio Build Tools met Desktop development with C++. S
 ## Teststatus
 
 Zie GitHub Actions voor de actuele buildresultaten. Een volledige installatie en upgrade in een echte Proxmox-LXC en echte SMTP-verzending moeten nog praktisch worden gecontroleerd. De oorspronkelijke uitgebreide gebruiksinstructies staan in `README.html`; voor installatie en updates heeft deze README voorrang.
-

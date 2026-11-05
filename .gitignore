@@ -1,0 +1,13 @@
+/target/
+/output/
+*.lkv
+*.bak
+secrets.json
+!fixtures/dotnet-vault.lkv
+
+**/bin/
+**/obj/
+/ServerBin/
+GITHUB-REVISION
+github-token
+*.tar.gz

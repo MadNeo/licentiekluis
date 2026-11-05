@@ -1,0 +1,42 @@
+name: Build and test LicentieKluis
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  native-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Rust
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Build native client and run tests
+        shell: pwsh
+        run: ./scripts/Build-Rust.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LicentieKluis-Rust-Windows
+          path: |
+            output/Windows-Rust/
+            Cargo.lock
+  server:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet run --project Tests/LicenseVault.Tests.csproj -c Release
+      - run: dotnet publish Server/LicenseVault.Server.csproj -c Release --self-contained false -p:UseAppHost=false -o output/Server
+      - run: node Tests/web.test.cjs
+      - run: node Tests/mail.test.cjs
+      - run: bash -n scripts/*.sh
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - run: shellcheck -S error scripts/*.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LicentieKluis-Server
+          path: output/Server/

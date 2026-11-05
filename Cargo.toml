@@ -1,0 +1,33 @@
+[package]
+name = "licentiekluis-native"
+version = "0.3.0"
+edition = "2021"
+license = "MIT"
+description = "Native Windows license vault with offline encrypted storage"
+
+[dependencies]
+anyhow = "1.0"
+aes-gcm = "0.10.3"
+pbkdf2 = "0.12.2"
+sha2 = "0.10.8"
+rand = "0.8.5"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+zeroize = "1.8"
+tempfile = "3.14"
+fs2 = "0.4.3"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "native-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+native-windows-gui = "1.0.13"
+clipboard-win = "5.4"
+open = "5.3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+
