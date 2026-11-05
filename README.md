@@ -68,3 +68,10 @@ Installeer Rust en Visual Studio Build Tools met Desktop development with C++. S
 ## Teststatus
 
 Zie GitHub Actions voor de actuele buildresultaten. Een volledige installatie en upgrade in een echte Proxmox-LXC en echte SMTP-verzending moeten nog praktisch worden gecontroleerd. De oorspronkelijke uitgebreide gebruiksinstructies staan in `README.html`; voor installatie en updates heeft deze README voorrang.
+
+## PDF-handleidingen
+
+- [Handleiding serversoftware](docs/LicentieKluis_Server_Handleiding.pdf)
+- [Handleiding Windowssoftware](docs/LicentieKluis_Windows_Handleiding.pdf)
+
+Dit zijn de eerder opgeleverde PDF-handleidingen. Voor de daarna toegevoegde GitHub-installatie en het commando `upgrade` volg je de actuele instructies hierboven.
