@@ -43,7 +43,7 @@ pub fn bind(window: &nwg::Window, panels: Vec<Panel>, design: (i32, i32))
     nwg::bind_raw_event_handler(&window.handle, 0x4C4B0001, move |hwnd, msg, w, _l| {
         if msg == WM_CTLCOLORSTATIC {
             // Preserve the label's colored brush without white boxes behind its text.
-            unsafe { SetBkMode(w as HDC, TRANSPARENT); }
+            unsafe { SetBkMode(w as HDC, TRANSPARENT as i32); }
             return None;
         }
         if msg != WM_ERASEBKGND { return None; }
