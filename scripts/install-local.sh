@@ -16,8 +16,7 @@ if [[ -n "$init_file" ]]; then
     trap 'rm -f -- "$init_file"' EXIT
 fi
 [[ "$server_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]] || { echo 'Ongeldige hostnaam / IPv4-adres.'; exit 1; }
-apt-get update
-apt-get install -y ca-certificates curl caddy libicu74 libssl3t64 zlib1g
+(umask 022; apt-get update; apt-get install -y ca-certificates curl caddy libicu74 libssl3t64 zlib1g)
 useradd --system --home /var/lib/licentiekluis --shell /usr/sbin/nologin licentiekluis
 install -d -m 755 /opt/licentiekluis /opt/licentiekluis/dotnet /opt/licentiekluis/app
 install -d -m 700 /var/lib/licentiekluis
@@ -67,6 +66,7 @@ https://$server_name {
 }
 CADDY
 chmod 644 /etc/caddy/Caddyfile /etc/systemd/system/licentiekluis.service
+chmod 755 /etc/caddy
 caddy validate --config /etc/caddy/Caddyfile
 systemctl daemon-reload
 systemctl enable --now licentiekluis
@@ -83,7 +83,12 @@ if [[ -f "$ca" ]]; then
     install -m 644 "$ca" /root/licentiekluis-ca.crt
     echo
     echo 'Kopieer /root/licentiekluis-ca.crt naar Windows en vertrouw dit certificaat (zie handleiding).'
-else echo 'CA-certificaat nog niet gevonden; controleer journalctl -u caddy.'; fi
+else echo 'CA-certificaat ontbreekt; controleer journalctl -u caddy.' >&2; exit 1; fi
+systemctl is-active --quiet licentiekluis caddy
+for path in /health / /app.js /app.css /mail.js; do
+    curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 15 \
+        --cacert "$ca" --resolve "$server_name:443:127.0.0.1" "https://$server_name$path" -o /dev/null
+done
 echo "Server: https://$server_name"
 echo 'De .NET runtime is lokaal geinstalleerd. Bij bouwen uit broncode is ook de SDK aanwezig.'
 

@@ -1,103 +1,85 @@
 # LicentieKluis installeren op Proxmox
 
-## Wat de wizard doet
+## Nieuwe container: één commando
 
-Start `scripts/install-proxmox.sh` als root in de **Shell van de Proxmox-node**. De wizard maakt zelf een nieuwe Ubuntu 24.04 LXC aan. Standaard: onbevoorrechte container, 2 CPU-kernen, 2048 MB RAM, 8 GB disk, 512 MB swap en automatisch starten na een herstart van Proxmox. Docker, nesting en een extra VM zijn niet nodig.
-
-De wizard controleert de hosttools en installeert ontbrekende curl, CA-certificaten, Python, tar, util-linux en zo nodig het Proxmox-containerpakket via de bestaande APT-bronnen. Proxmox VE zelf moet al zijn geïnstalleerd; de wizard zet een gewone Linuxserver niet om in Proxmox en wijzigt geen Proxmox-repositories.
-
-In de container worden automatisch Caddy (HTTPS), .NET 10 SDK/runtime, benodigde systeembibliotheken, de nieuwste serverbroncode van GitHub `main` en de LicentieKluis-systemd-service geïnstalleerd. Internettoegang vanuit host én container is vereist, onder andere naar GitHub, Ubuntu-pakketbronnen, Microsoft en NuGet.
-
-## Direct starten vanaf GitHub (een plakcommando)
-
-Open **Proxmox → node → Shell** als root en plak het hele onderstaande blok. Handmatig downloaden of kopiëren is niet nodig. Vul het GitHub-token afgeschermd in wanneer daarom wordt gevraagd; het staat niet in je shellgeschiedenis. Het commando haalt de nieuwste installer van `main` op en start direct de wizard. De wizard neemt dit token over zonder het opnieuw te vragen. De container-, netwerk- en accountkeuzes blijven zichtbaar vóór aanmaken.
+Open **Proxmox → node → Shell** als root:
 
 ```bash
-bash <<'LKV'
-set -Eeuo pipefail
-umask 077
-[[ $EUID -eq 0 && -d /etc/pve ]] || { echo "Start dit op de Proxmox-host als root."; exit 1; }
-if ! command -v curl >/dev/null || [[ ! -s /etc/ssl/certs/ca-certificates.crt ]]; then
-    apt-get update
-    apt-get install -y curl ca-certificates
-fi
-work=$(mktemp -d)
-trap 'rm -rf -- "$work"' EXIT
-read -rsp "GitHub-token (Contents: Read voor MadNeo/licentiekluis): " token </dev/tty
-echo
-[[ "$token" =~ ^[A-Za-z0-9_]+$ ]] || { echo "Geen geldig GitHub-token ingevuld."; exit 1; }
-printf "Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\n" "$token" > "$work/headers"
-curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-    --header @"$work/headers" \
-    "https://api.github.com/repos/MadNeo/licentiekluis/contents/scripts/install-proxmox.sh?ref=main" \
-    --output "$work/install-proxmox.sh"
-bash -n "$work/install-proxmox.sh"
-GITHUB_TOKEN="$token" bash "$work/install-proxmox.sh" </dev/tty
-LKV
+curl -fsSL https://raw.githubusercontent.com/MadNeo/licentiekluis/main/scripts/install-proxmox.sh -o /root/install-proxmox.sh && bash /root/install-proxmox.sh
 ```
 
-## Starten met een gedownload bestand (alternatief)
+De repository is openbaar; een GitHub-token is niet nodig (Enter bij de tokenvraag). Ontbreekt curl op de host, voer eerst `apt-get update && apt-get install -y curl ca-certificates` uit.
 
-1. Download `install-proxmox.sh` naar je Windows-pc. Het bestand is ook beschikbaar in deze repository onder `scripts/` (bij een privérepository moet je ingelogd zijn).
-2. Kopieer het vanuit PowerShell naar de Proxmox-node; vervang `PROXMOX-IP` door het IP-adres van je node:
+De wizard vraagt opslag, bridge, DHCP of vast IP, eventueel VLAN, servernaam en accounts. Standaard: Ubuntu 24.04, onbevoorrechte LXC, 2 CPU, 2048 MB RAM, 8 GB disk, 512 MB swap en starten bij boot. Ontbrekende hosttools worden via de bestaande APT-bronnen geïnstalleerd. Proxmox moet al aanwezig zijn; Docker, een extra VM en nesting zijn voor deze toepassing niet nodig.
 
-   ```powershell
-   scp "$env:USERPROFILE\Downloads\install-proxmox.sh" root@PROXMOX-IP:/root/install-proxmox.sh
-   ```
+De wizard haalt de actuele broncode van GitHub main op. In de container installeert hij Caddy, .NET 10 SDK/runtime, systeembibliotheken en LicentieKluis. Host en container hebben internettoegang nodig naar GitHub, Ubuntu, Microsoft en NuGet.
 
-3. Open **Proxmox → node → Shell** en start:
+## Bestaande container na netwerkfout hervatten
 
-   ```bash
-   bash /root/install-proxmox.sh
-   ```
+Voor de door deze wizard gemaakte container 102:
 
-4. Kies container-ID, opslag, bridge, IP-instellingen en eventueel VLAN. Enter gebruikt de getoonde standaard. Een vast IP-adres wordt aanbevolen; bij DHCP moet je een reservering maken. De gateway 192.168.178.1 is een voorstel en moet bij je eigen netwerk passen. DNS wordt overgenomen van de host. Een opgegeven server-DNS-naam moet al naar de container verwijzen.
-5. Kies een serveraccount en wachtwoord van minimaal 14 tekens. Dit is de aanmelding voor de server, niet het lokale Windows-kluiswachtwoord. Voor containerbeheer gebruik je `pct enter CTID` op de Proxmox-host; er wordt geen apart rootwachtwoord voor SSH ingesteld.
-6. Vul bij een privérepository een GitHub fine-grained token in met toegang tot **MadNeo/licentiekluis**, **Contents: Read-only** (en standaard Metadata). Het token wordt niet getoond en wordt in de container opgeslagen als `/etc/licentiekluis/github-token`, eigenaar root, modus 600, voor toekomstige updates. Gebruik een passende vervaldatum; vervang het token wanneer het verloopt. Bij een openbare repository mag het leeg blijven.
-7. Controleer het overzicht en typ `ja`. De wizard downloadt de broncode en de officiële Ubuntu-template, maakt de container en installeert de server. Aan het einde verschijnen het HTTPS-adres en de container-ID.
+```bash
+curl -fsSL https://raw.githubusercontent.com/MadNeo/licentiekluis/main/scripts/install-proxmox.sh -o /root/install-proxmox.sh && bash /root/install-proxmox.sh --resume 102
+```
 
-Een bezet ID wordt geweigerd. Bij een fout wordt geen bestaande VM/LXC verwijderd of gestopt. Een gedeeltelijk geïnstalleerde nieuwe container blijft staan zodat je de fout kunt onderzoeken. Start voor een nieuwe installatie niet opnieuw tegen die gedeeltelijk geïnstalleerde container; controleer hem eerst en kies zo nodig zelf een nieuw vrij ID.
+Dit behoudt disk, bridge, IP-keuze en VLAN, start de container indien nodig en herstelt de rechten van de bekende systemd-netwerkconfiguratie. De wizard vraagt opnieuw het webaccount en rootwachtwoord en maakt vervolgens de installatie af.
 
-## Windows verbinden
+Hervatten vereist een Ubuntu-container met hostname `licentiekluis` en de beschrijving van deze installer. Er mag nog geen software/data onder `/opt/licentiekluis`, `/var/lib/licentiekluis` of Caddy-configuratie bestaan. Bij bestaande of gedeeltelijk geïnstalleerde software stopt hij zonder deze te overschrijven. Gebruik bij een werkende installatie `upgrade`; onderzoek een gedeeltelijke software-installatie voordat je verdergaat. Geen enkele route verwijdert containers of databases.
 
-Caddy maakt een eigen lokale CA aan. Aan het einde staat de **publieke** CA op de Proxmox-host als `/root/licentiekluis-CTID-ca.crt`. Kopieer deze vanaf je eigen Proxmox-host naar Windows:
+## Twee verschillende logins
+
+- **LXC-console:** gebruikersnaam `root`. Vul bij de installatie het gewenste rootwachtwoord tweemaal afgeschermd in. Het wordt met `chpasswd` ingesteld en het tijdelijke root-only bestand wordt verwijderd. Het wachtwoord wordt niet in GitHub opgeslagen. Automatisering kan `LKV_ROOT_PASSWORD` aanleveren; zet dit niet in publieke scripts of logs.
+- **Webpagina en Windows-serververbinding:** het afzonderlijke LicentieKluis-serveraccount en wachtwoord (minimaal 14 tekens) die je in de wizard kiest.
+
+Op de Proxmox-host kun je ook `pct enter 102` gebruiken. Root-login via SSH wordt niet extra ingeschakeld; gebruik de Proxmox-console voor root met wachtwoord. Het rootwachtwoord van de Proxmox-host zelf wordt niet gewijzigd.
+
+## Webserver en adres
+
+Caddy en LicentieKluis starten automatisch bij boot. Caddy luistert op HTTPS 443 en verwijst door naar de applicatie op localhost 5080. De bestaande webinterface wordt met de server gepubliceerd. HTTP wordt door Caddy naar HTTPS doorgestuurd.
+
+De installatie controleert:
+
+1. Het IPv4-adres van eth0, met een begrensde wachttijd en voortgang.
+2. De interne gezondheidscontrole en actieve services.
+3. HTTPS met certificaatvalidatie: `/health`, de webpagina `/` en de drie JavaScript/CSS-bestanden.
+4. Dezelfde HTTPS-paden vanaf de Proxmox-host via het container-IP.
+
+Pas daarna verschijnt **GEREED: https://...**. Open dit adres in je browser. Dit is het IP van de **container**, niet van de Proxmox-host. Een eigen DNS-naam moet op je pc naar de container verwijzen. Reserveer een DHCP-adres in je router om het adres stabiel te houden.
+
+Bestaande firewallregels blijven behouden. Je pc moet de container op TCP 443 kunnen bereiken (80 voor HTTP-omleiding). De hostcontrole bewijst bereikbaarheid vanaf Proxmox; een aparte pc/VLAN kan aanvullende firewall- of DNS-instellingen nodig hebben.
+
+## Windows: lokaal HTTPS-certificaat vertrouwen
+
+Caddy maakt een lokale CA. De publieke CA wordt op de Proxmox-host opgeslagen als `/root/licentiekluis-CTID-ca.crt`. Vervang `CTID` en `PROXMOX-IP` in PowerShell:
 
 ```powershell
 scp root@PROXMOX-IP:/root/licentiekluis-CTID-ca.crt "$env:USERPROFILE\Downloads\licentiekluis-ca.crt"
 Import-Certificate -FilePath "$env:USERPROFILE\Downloads\licentiekluis-ca.crt" -CertStoreLocation Cert:\CurrentUser\Root
 ```
 
-Vervang `CTID` en `PROXMOX-IP`. Vertrouw alleen het certificaat afkomstig van jouw eigen installatie. Open daarna het getoonde HTTPS-adres in je browser. Gebruik hetzelfde adres in de Windowsapp bij **Verbinding & back-up** en meld aan met het serveraccount. Windows 0.5.0 synchroniseert daarna automatisch terwijl de kluis geopend is.
+Vertrouw alleen de CA van je eigen installatie. Daarna kun je de HTTPS-webpagina openen zonder certificaatwaarschuwing en hetzelfde adres gebruiken in de Windowsapp. Log in met het **serveraccount**, niet automatisch met de LXC-rootlogin.
 
-Bestaande Proxmox-/netwerkfirewallregels worden niet aangepast. Zorg dat je pc de container op TCP 443 kan bereiken. De interne applicatiepoort 5080 luistert alleen op localhost binnen de container.
+## Upgrade met behoud van gegevens
 
-## Bijwerken met behoud van gegevens
-
-Op de Proxmox-host:
-
-```bash
-pct enter CTID
-```
-
-Daarna **binnen de container**:
+Op de Proxmox-host: `pct enter 102`. Vervolgens binnen de container:
 
 ```bash
 upgrade
 ```
 
-Dit haalt opnieuw GitHub `main` op, bouwt en test de software, maakt een herstelkopie en behoudt licenties, serveraccount, sleutels en SMTP-instellingen. Bij een mislukte start of gezondheidscontrole herstelt het updatescript de vorige applicatie en gegevens. Gebruik de installatiewizard uitsluitend voor nieuwe containers.
+Dit haalt GitHub main op, bouwt/test, maakt een herstelkopie en behoudt database, accounts, sleutels en SMTP-instellingen. Bij een mislukte start/gezondheidscontrole herstelt de updater de vorige applicatie en gegevens. Data staat in `/var/lib/licentiekluis`, software in `/opt/licentiekluis`. Neem de volledige container met configuratie en sleutels op in Proxmox/PBS-back-ups.
 
-De servergegevens staan in `/var/lib/licentiekluis`, los van de software in `/opt/licentiekluis`. Neem de volledige container op in je Proxmox/PBS-back-ups. Bewaar ook de serverconfiguratie en sleutels; alleen het versleutelde gegevensbestand is onvoldoende voor herstel.
+## Verwerkte correcties en diagnose
 
-## Problemen onderzoeken
+Bridge-detectie volgt geen sysfs-symlinklussen meer. `pct create` en `pct start` draaien met umask 022 zodat netwerkbestanden leesbaar zijn. Geheimen blijven beschermd met umask 077. De bekende netwerkmap krijgt 755 en eth0.network 644, waarna networkd opnieuw configureert. Pakketinstallatie gebruikt eveneens normale systeemrechten. Een netwerkfout wordt niet stilzwijgend als DHCP-storing aangemerkt.
 
 ```bash
-pct enter CTID
-systemctl status licentiekluis caddy --no-pager
-journalctl -u licentiekluis -u caddy -n 80 --no-pager
-curl -fsS http://127.0.0.1:5080/health
+pct exec 102 -- ip -4 -br addr
+pct exec 102 -- ip route
+pct exec 102 -- systemctl status systemd-networkd licentiekluis caddy --no-pager
+pct exec 102 -- journalctl -u systemd-networkd -u licentiekluis -u caddy -n 80 --no-pager
 ```
 
-Bij een fout na aanmaken blijven de container en de uitgepakte broncode beschikbaar. Het tijdelijke bestand met het serverwachtwoord wordt verwijderd als de container bereikbaar is. Bij een abrupt gestopte host of onbereikbare container: verwijder `/root/licentiekluis-init.txt` zodra je weer toegang hebt.
+Bij een fout blijft de container staan. Tijdelijke wachtwoordbestanden worden opgeruimd wanneer de container reageert. Na een abrupte hostonderbreking: verwijder `/root/licentiekluis-init.txt` en `/root/licentiekluis-root.txt` in de container zodra je weer toegang hebt.
 
-De tests gebruiken geïsoleerde Proxmox-simulaties voor succes, bezet ID, ongeldige repositorytoegang, netwerkuitval en installatiefouten. De echte serverinitialisatie wordt apart getest. Een volledige installatie op jouw Proxmox-host is daarmee niet uitgevoerd.
+Automatische tests simuleren Proxmox, netwerkuitval, HTTPS-uitval, rootwachtwoordoverdracht, hervatten en het weigeren van bestaande data. Deze tests vervangen geen volledige installatie op jouw Proxmox-host.

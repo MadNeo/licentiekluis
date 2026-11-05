@@ -5,13 +5,13 @@ umask 077
 REPOSITORY=MadNeo/licentiekluis
 # The application and future upgrades always use main, resolved once per download.
 SOURCE_REF=main
-work=''; created=0; complete=0; ctid=''
+work=''; created=0; complete=0; ctid=''; resume=0
 fail() { printf 'FOUT: %s\n' "$*" >&2; exit 1; }
 cleanup() {
     rc=$?
     trap - EXIT
     if (( created )); then
-        timeout --kill-after=1 5 pct exec "$ctid" -- rm -f /root/licentiekluis-init.txt 2>/dev/null || true
+        timeout --kill-after=1 5 pct exec "$ctid" -- rm -f /root/licentiekluis-init.txt /root/licentiekluis-root.txt 2>/dev/null || true
         if (( ! complete )); then
             printf '\nInstallatie niet voltooid. Container %s is behouden voor onderzoek.\n' "$ctid" >&2
             printf 'Open de console met: pct enter %s\nEr is geen bestaande container verwijderd.\n' "$ctid" >&2
@@ -54,41 +54,57 @@ main() {
         fi
     done
     if ! dpkg-query -W -f='${Status}' ca-certificates 2>/dev/null | grep -q 'install ok installed'; then packages+=(ca-certificates); fi
-    if (( ${#packages[@]} )); then apt-get update; apt-get install -y "${packages[@]}"; fi
+    if (( ${#packages[@]} )); then (umask 022; apt-get update; apt-get install -y "${packages[@]}"); fi
     for tool in pct pveam pvesm pvesh; do command -v "$tool" >/dev/null || fail "$tool ontbreekt; herstel eerst de Proxmox-installatie."; done
     exec 9>/run/lock/licentiekluis-proxmox.lock
     flock -n 9 || fail 'Er draait al een LicentieKluis-containerinstallatie op deze node.'
     local suggested hostname root_storage template_storage bridge cidr gateway cores memory disk vlan net server_name admin password repeat token template archive ip ca
-    suggested=$(pvesh get /cluster/nextid)
-    ask ctid 'Container-ID' "$suggested"
-    valid_id "$ctid" || fail 'Ongeldig container-ID.'
-    pvesh get /cluster/nextid --vmid "$ctid" >/dev/null || fail 'Dit ID is al in gebruik in het cluster.'
-    ask hostname 'Containernaam' licentiekluis
-    valid_name "$hostname" || fail 'Ongeldige containernaam.'
-    choose_storage root_storage rootdir 'Beschikbare opslag voor de containerdisk'
-    choose_storage template_storage vztmpl 'Beschikbare opslag voor Ubuntu-templates'
-    printf 'Netwerkbridges:\n'
-    # Inspect only the bridge marker; never recursively follow sysfs symlinks.
-    local bridge_path
-    for bridge_path in /sys/class/net/*; do
-        if [[ -d "$bridge_path/bridge" ]]; then
-            printf '%s\n' "${bridge_path##*/}"
+    local root_password root_repeat config
+    if [[ ${1:-} == --resume && $# == 2 ]]; then
+        resume=1; ctid=$2
+        valid_id "$ctid" || fail 'Ongeldig container-ID.'
+        config=$(pct config "$ctid") || fail 'Container bestaat niet.'
+        grep -q '^hostname: licentiekluis$' <<< "$config" || fail 'Hervatten is alleen toegestaan voor hostname licentiekluis.'
+        grep -q '^ostype: ubuntu$' <<< "$config" || fail 'Geen Ubuntu-container.'
+        grep -q '^description: LicentieKluis' <<< "$config" || fail 'Deze container is niet door deze wizard aangemaakt.'
+        hostname=licentiekluis
+        cidr=$(sed -n 's/^net0: .*ip=\([^,]*\).*/\1/p' <<< "$config")
+        [[ -n "$cidr" ]] || fail 'Geen IPv4-configuratie in net0.'
+        printf 'Bestaande container %s hervatten; netwerkconfiguratie blijft behouden.\n' "$ctid"
+    elif (( $# )); then
+        fail 'Gebruik: bash install-proxmox.sh [--resume CTID]'
+    else
+        suggested=$(pvesh get /cluster/nextid)
+        ask ctid 'Container-ID' "$suggested"
+        valid_id "$ctid" || fail 'Ongeldig container-ID.'
+        pvesh get /cluster/nextid --vmid "$ctid" >/dev/null || fail 'Dit ID is al in gebruik in het cluster.'
+        ask hostname 'Containernaam' licentiekluis
+        valid_name "$hostname" || fail 'Ongeldige containernaam.'
+        choose_storage root_storage rootdir 'Beschikbare opslag voor de containerdisk'
+        choose_storage template_storage vztmpl 'Beschikbare opslag voor Ubuntu-templates'
+        printf 'Netwerkbridges:\n'
+        # Inspect only the bridge marker; never recursively follow sysfs symlinks.
+        local bridge_path
+        for bridge_path in /sys/class/net/*; do
+            if [[ -d "$bridge_path/bridge" ]]; then
+                printf '%s\n' "${bridge_path##*/}"
+            fi
+        done
+        ask bridge 'Netwerkbridge' vmbr0
+        [[ "$bridge" =~ ^[a-zA-Z0-9_.-]+$ && -d /sys/class/net/"$bridge"/bridge ]] || fail 'Deze netwerkbridge bestaat niet.'
+        ask cidr 'IPv4/CIDR of dhcp (vast IP aanbevolen)' dhcp
+        gateway=''
+        if [[ "$cidr" != dhcp ]]; then
+            python3 -c 'import ipaddress,sys; ipaddress.IPv4Interface(sys.argv[1]); assert "/" in sys.argv[1]' "$cidr" || fail 'Gebruik bijvoorbeeld 192.168.178.50/24.'
+            ask gateway 'IPv4-gateway' 192.168.178.1
+            python3 -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$gateway" || fail 'Ongeldige gateway.'
         fi
-    done
-    ask bridge 'Netwerkbridge' vmbr0
-    [[ "$bridge" =~ ^[a-zA-Z0-9_.-]+$ && -d /sys/class/net/"$bridge"/bridge ]] || fail 'Deze netwerkbridge bestaat niet.'
-    ask cidr 'IPv4/CIDR of dhcp (vast IP aanbevolen)' dhcp
-    gateway=''
-    if [[ "$cidr" != dhcp ]]; then
-        python3 -c 'import ipaddress,sys; ipaddress.IPv4Interface(sys.argv[1]); assert "/" in sys.argv[1]' "$cidr" || fail 'Gebruik bijvoorbeeld 192.168.178.50/24.'
-        ask gateway 'IPv4-gateway' 192.168.178.1
-        python3 -c 'import ipaddress,sys; ipaddress.IPv4Address(sys.argv[1])' "$gateway" || fail 'Ongeldige gateway.'
+        ask vlan 'VLAN-ID (0 = geen VLAN-tag)' 0
+        [[ "$vlan" =~ ^[0-9]{1,4}$ ]] && (( 10#$vlan <= 4094 )) || fail 'VLAN moet 0 t/m 4094 zijn.'
+        ask cores 'CPU-kernen' 2; ask memory 'RAM in MB' 2048; ask disk 'Disk in GB' 8
+        [[ "$cores" =~ ^[1-9][0-9]*$ && "$memory" =~ ^[1-9][0-9]*$ && "$disk" =~ ^[1-9][0-9]*$ ]] || fail 'CPU, RAM en disk moeten positieve gehele getallen zijn.'
+        (( cores <= 128 && memory >= 1024 && disk >= 8 )) || fail 'Gebruik maximaal 128 CPU-kernen, minimaal 1024 MB RAM en 8 GB disk.'
     fi
-    ask vlan 'VLAN-ID (0 = geen VLAN-tag)' 0
-    [[ "$vlan" =~ ^[0-9]{1,4}$ ]] && (( 10#$vlan <= 4094 )) || fail 'VLAN moet 0 t/m 4094 zijn.'
-    ask cores 'CPU-kernen' 2; ask memory 'RAM in MB' 2048; ask disk 'Disk in GB' 8
-    [[ "$cores" =~ ^[1-9][0-9]*$ && "$memory" =~ ^[1-9][0-9]*$ && "$disk" =~ ^[1-9][0-9]*$ ]] || fail 'CPU, RAM en disk moeten positieve gehele getallen zijn.'
-    (( cores <= 128 && memory >= 1024 && disk >= 8 )) || fail 'Gebruik maximaal 128 CPU-kernen, minimaal 1024 MB RAM en 8 GB disk.'
     read -rp 'Server-DNS-naam (Enter = het IPv4-adres van de container): ' server_name
     [[ -z "$server_name" || "$server_name" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || fail 'Ongeldige servernaam; geen https:// of pad invoeren.'
     read -rp 'Nieuw LicentieKluis-serveraccount: ' admin
@@ -96,16 +112,28 @@ main() {
     read -rsp 'Serverwachtwoord (minimaal 14 tekens): ' password; echo
     read -rsp 'Herhaal serverwachtwoord: ' repeat; echo
     [[ ${#password} -ge 14 && "$password" == "$repeat" ]] || fail 'Wachtwoorden verschillen of zijn te kort.'
+    root_password=${LKV_ROOT_PASSWORD:-}
+    unset LKV_ROOT_PASSWORD
+    if [[ -z "$root_password" ]]; then
+        read -rsp 'LXC-rootwachtwoord (console-login): ' root_password; echo
+        read -rsp 'Herhaal LXC-rootwachtwoord: ' root_repeat; echo
+        [[ "$root_password" == "$root_repeat" ]] || fail 'Rootwachtwoorden verschillen.'
+    fi
+    [[ ${#root_password} -ge 12 && "$root_password" != *$'\n'* && "$root_password" != *$'\r'* ]] || fail 'Rootwachtwoord: minimaal 12 tekens en geen regeleinden.'
+    unset root_repeat
     token=${GITHUB_TOKEN:-}
     unset GITHUB_TOKEN
     if [[ -z "$token" ]]; then
         read -rsp 'GitHub-token met Contents: Read voor MadNeo/licentiekluis (Enter bij openbare repository): ' token; echo
     fi
     [[ "$token" != *$'\r'* && "$token" != *'"'* && "$token" != *'\'* ]] || fail 'Ongeldig token.'
+    if (( ! resume )); then
     printf '\nNieuwe LXC %s (%s): %s CPU, %s MB RAM, %s GB op %s\nNetwerk: %s, %s, VLAN %s\n' "$ctid" "$hostname" "$cores" "$memory" "$disk" "$root_storage" "$bridge" "$cidr" "$vlan"
     printf 'Ubuntu 24.04; onbevoorrecht; automatisch starten bij boot.\nGitHub-token wordt alleen in de LXC als root-only bestand opgeslagen voor upgrade.\n'
+    fi
+    printf 'LXC-consolegebruiker: root. Weblogin: %s (apart account).\n' "$admin"
     local answer
-    read -rp 'Deze nieuwe container aanmaken? [ja/nee]: ' answer
+    read -rp 'Installatie uitvoeren? [ja/nee]: ' answer
     [[ "$answer" == ja ]] || fail 'Geannuleerd; geen container aangemaakt.'
     work=$(mktemp -d)
     printf 'header = "Accept: application/vnd.github+json"\n' > "$work/curl.conf"
@@ -120,22 +148,44 @@ main() {
     head -n 1 "$work/archive-list" > "$work/source/GITHUB-REVISION"
     grep -q 'LKV_INIT_FILE' "$work/source/scripts/install-local.sh" || fail 'GitHub main bevat nog niet de nieuwe Proxmox-installer.'
     tar -czf "$work/deploy.tar.gz" -C "$work/source" .
-    pveam update
-    archive=$(pveam available --section system | awk '$2 ~ /^ubuntu-24\.04-standard_.*_amd64\.tar\.(zst|xz|gz)$/ {print $2}' | sort -V | tail -n 1)
-    [[ -n "$archive" ]] || fail 'Geen Ubuntu 24.04 amd64-template gevonden in Proxmox.'
-    pveam download "$template_storage" "$archive"
-    template="$template_storage:vztmpl/$archive"
-    net="name=eth0,bridge=$bridge,ip=$cidr,type=veth"
-    [[ -z "$gateway" ]] || net+=",gw=$gateway"
-    (( 10#$vlan == 0 )) || net+=",tag=$((10#$vlan))"
-    # pct itself rejects an occupied ID; never stop/destroy an existing guest.
-    # Proxmox generates system/network files using the inherited umask.
-    # Keep secrets at 077, but create/start the guest with normal OS permissions.
-    (umask 022; pct create "$ctid" "$template" --hostname "$hostname" --ostype ubuntu --unprivileged 1 \
-        --cores "$cores" --memory "$memory" --swap 512 --rootfs "$root_storage:$disk" \
-        --net0 "$net" --onboot 1 --description 'LicentieKluis: versleutelde licentieserver; update binnen LXC met upgrade')
+    if (( ! resume )); then
+        pveam update
+        archive=$(pveam available --section system | awk '$2 ~ /^ubuntu-24\.04-standard_.*_amd64\.tar\.(zst|xz|gz)$/ {print $2}' | sort -V | tail -n 1)
+        [[ -n "$archive" ]] || fail 'Geen Ubuntu 24.04 amd64-template gevonden in Proxmox.'
+        pveam download "$template_storage" "$archive"
+        template="$template_storage:vztmpl/$archive"
+        net="name=eth0,bridge=$bridge,ip=$cidr,type=veth"
+        [[ -z "$gateway" ]] || net+=",gw=$gateway"
+        (( 10#$vlan == 0 )) || net+=",tag=$((10#$vlan))"
+        # pct itself rejects an occupied ID; never stop/destroy an existing guest.
+        # Proxmox generates system/network files using the inherited umask.
+        # Keep secrets at 077, but create/start the guest with normal OS permissions.
+        (umask 022; pct create "$ctid" "$template" --hostname "$hostname" --ostype ubuntu --unprivileged 1 \
+            --cores "$cores" --memory "$memory" --swap 512 --rootfs "$root_storage:$disk" \
+            --net0 "$net" --onboot 1 --description 'LicentieKluis: versleutelde licentieserver; update binnen LXC met upgrade')
+        created=1
+    fi
+    if ! pct status "$ctid" | grep -q 'status: running'; then
+        (umask 022; pct start "$ctid")
+    fi
+    # Refuse to overwrite application data, including a partially initialized vault.
+    pct exec "$ctid" -- bash -c 'test ! -e /opt/licentiekluis && test ! -e /var/lib/licentiekluis && test ! -e /etc/caddy/Caddyfile' || fail 'Bestaande of gedeeltelijke software-installatie: gebruik upgrade of onderzoek de fout; niets overschreven.'
     created=1
-    (umask 022; pct start "$ctid")
+    # Repair only the known Proxmox network configuration, not arbitrary files.
+    pct exec "$ctid" -- bash -c '
+        set -e
+        test -f /etc/systemd/network/eth0.network
+        chmod 755 /etc /etc/systemd /etc/systemd/network
+        chmod 644 /etc/systemd/network/eth0.network
+        systemctl restart systemd-networkd
+        ip link set eth0 up
+        networkctl reconfigure eth0
+    '
+    printf 'root:%s\n' "$root_password" > "$work/root.txt"
+    unset root_password
+    pct push "$ctid" "$work/root.txt" /root/licentiekluis-root.txt --perms 0600
+    pct exec "$ctid" -- bash -c 'set -e; trap "rm -f /root/licentiekluis-root.txt" EXIT; chpasswd < /root/licentiekluis-root.txt'
+    rm -f "$work/root.txt"
     printf 'Wachten op IPv4-adres van container %s (maximaal circa 3 minuten)...\n' "$ctid"
     ip=''
     for attempt in {1..20}; do
@@ -160,15 +210,23 @@ main() {
     unset token
     pct exec "$ctid" -- env LKV_SERVER_NAME="$server_name" LKV_INIT_FILE=/root/licentiekluis-init.txt \
         bash /root/licentiekluis-source/scripts/install-local.sh
-    pct exec "$ctid" -- rm -f /root/licentiekluis-init.txt /root/licentiekluis-source.tar.gz
+    pct exec "$ctid" -- rm -f /root/licentiekluis-init.txt /root/licentiekluis-root.txt /root/licentiekluis-source.tar.gz
     ca="/root/licentiekluis-$ctid-ca.crt"
     pct pull "$ctid" /root/licentiekluis-ca.crt "$ca"
+    # Verify the actual HTTPS service through the container network from the host.
+    for path in /health / /app.js /app.css /mail.js; do
+        curl --fail --silent --show-error --noproxy '*' --connect-timeout 5 --max-time 15 \
+            --cacert "$ca" --resolve "$server_name:443:$ip" "https://$server_name$path" -o /dev/null \
+            || fail "HTTPS niet bereikbaar vanaf Proxmox ($path). Controleer Caddy en firewall; container behouden."
+    done
     complete=1
     printf '\nGEREED: https://%s\nContainer: %s | IPv4: %s\n' "$server_name" "$ctid" "$ip"
     printf 'Windows: vertrouw eerst het CA-certificaat %s (zie handleiding).\n' "$ca"
+    printf 'LXC-consolelogin: root, met het door jou opgegeven rootwachtwoord.\n'
     printf 'Console: pct enter %s\nBijwerken binnen die console: upgrade\n' "$ctid"
     [[ "$cidr" != dhcp ]] || printf 'Reserveer dit IP-adres in DHCP om het serveradres stabiel te houden.\n'
 }
 # Sourceable validation helpers for isolated tests; normal execution runs the wizard.
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi
+
 

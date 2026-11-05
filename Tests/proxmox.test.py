@@ -33,8 +33,13 @@ elif name=='pveam' and args[0]=='available': print('system ubuntu-24.04-standard
 elif name=='dpkg-query': print('install ok installed')
 elif name=='curl':
     if scenario=='bad-token': sys.exit(22)
-    shutil.copy(root/'source.tar.gz',args[args.index('-o')+1])
+    if '--cacert' in args:
+        if scenario=='web-failure': sys.exit(7)
+    else: shutil.copy(root/'source.tar.gz',args[args.index('-o')+1])
 elif name=='pct':
+    if args[0]=='config': print('hostname: licentiekluis\\nostype: ubuntu\\ndescription: LicentieKluis server\\nnet0: name=eth0,bridge=vmbr0,ip=dhcp,type=veth')
+    if args[0]=='status': print('status: stopped')
+    if args[0]=='exec' and any('test ! -e /opt/licentiekluis' in a for a in args) and scenario=='resume-installed': sys.exit(1)
     if args[0] in ['create','start']:
         mode=os.umask(0);os.umask(mode)
         assert mode==0o022, 'pct must not inherit secret-only umask'
@@ -45,6 +50,9 @@ elif name=='pct':
     if args[0]=='push':
         if args[3].endswith('licentiekluis-init.txt'):
             assert Path(args[2]).read_text()=='admin\\nvery-secret-password\\nvery-secret-password\\n'
+        if args[3].endswith('licentiekluis-root.txt'):
+            assert Path(args[2]).read_text()=='root:root-test-password\\n'
+            assert Path(args[2]).stat().st_mode & 0o777 == 0o600
         if args[3].endswith('github-token'): assert Path(args[2]).read_text()=='github-secret-token'
     if args[0]=='exec' and 'addr' in args:
         if scenario!='no-network': print('2: eth0 inet 192.168.178.50/24 scope global eth0')
@@ -59,26 +67,33 @@ elif name=='pct':
                 script=script.replace(original,new)
             target=root/'installer.sh';target.write_text(script)
             # ID, hostname, two storages, bridge, IP, VLAN, CPU, RAM, disk, DNS, account, passwords, token, confirmation.
-            answers=['']*11+['admin','very-secret-password','very-secret-password','github-secret-token','ja']
+            answers=['']*11+['admin','very-secret-password','very-secret-password','root-test-password','root-test-password','github-secret-token','ja']
             if scenario=='inherited-token': answers.pop(-2)
             if scenario=='static':
                 answers[5]='192.168.178.51/24';answers.insert(6,'192.168.178.1')
-            result=subprocess.run(['bash',str(target)],input='\n'.join(answers)+'\n',text=True,capture_output=True,
+            argv=['bash',str(target)]
+            if scenario.startswith('resume'):
+                answers=answers[10:]
+                argv+=['--resume','102']
+            result=subprocess.run(argv,input='\n'.join(answers)+'\n',text=True,capture_output=True,
                 env=dict(os.environ,PATH=str(commands)+':'+os.environ['PATH'],TEST_ROOT=str(root),SCENARIO=scenario,GITHUB_TOKEN='github-secret-token' if scenario=='inherited-token' else ''),timeout=60)
-            self.assertEqual(result.returncode==0,scenario in ['success','static','inherited-token'],result.stdout+result.stderr)
+            self.assertEqual(result.returncode==0,scenario in ['success','static','inherited-token','resume'],result.stdout+result.stderr)
             calls=(root/'calls').read_text()
-            self.assertNotIn('very-secret-password',calls);self.assertNotIn('github-secret-token',calls)
+            self.assertNotIn('root-test-password',calls);self.assertNotIn('root-test-password',result.stdout+result.stderr);self.assertNotIn('very-secret-password',calls);self.assertNotIn('github-secret-token',calls)
             self.assertNotIn('File system loop',result.stderr)
-            if scenario not in ['occupied']:
+            if scenario not in ['occupied'] and not scenario.startswith('resume'):
                 self.assertIn('Netwerkbridges:\nvmbr0\n',result.stdout)
             self.assertNotIn('"destroy"',calls);self.assertNotIn('"stop"',calls)
-            if scenario in ['occupied','bad-token']: self.assertFalse((root/'created').exists())
+            if scenario in ['occupied','bad-token'] or scenario.startswith('resume'): self.assertFalse((root/'created').exists())
             else: self.assertTrue((root/'created').exists())
             if scenario=='success':
                 self.assertIn('https://192.168.178.50',result.stdout)
                 self.assertIn('"--unprivileged", "1"',calls)
                 self.assertIn('"/etc/licentiekluis/github-token", "--perms", "0600"',calls)
-            if scenario in ['no-network','install-failure']: self.assertIn('behouden',result.stderr)
+            if scenario in ['no-network','install-failure','web-failure']: self.assertIn('behouden',result.stderr)
+    def test_resume_existing(self): self.exercise('resume')
+    def test_resume_refuses_existing_data(self): self.exercise('resume-installed')
+    def test_web_unreachable_is_not_success(self): self.exercise('web-failure')
     def test_token_passed_by_bootstrap(self): self.exercise('inherited-token')
     def test_static_network(self): self.exercise('static')
     def test_success(self): self.exercise('success')
@@ -88,4 +103,5 @@ elif name=='pct':
     def test_install_failure_preserves_guest(self): self.exercise('install-failure')
 
 if __name__=='__main__': unittest.main()
+
 
