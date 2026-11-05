@@ -62,6 +62,11 @@ fn native_windows_show_text_and_unobstructed_controls() {
     nwg::init().unwrap();
     let temp = tempfile::tempdir().unwrap();
     let app = App::build(temp.path().join("never-created.lkv")).unwrap();
+    // Hosted CI desktops may clamp CreateWindow's initial size to 1024 px.
+    // Render at the intended client sizes, independently of monitor resolution.
+    app.window.set_size(1180,780);
+    app.settings_window.set_size(720,520);
+    app.mail_window.set_size(920,680);
     app.status.set_text("Vergrendeld · Je gegevens blijven lokaal versleuteld.");
     let screenshots = PathBuf::from("target/ui-check");
     std::fs::create_dir_all(&screenshots).unwrap();
