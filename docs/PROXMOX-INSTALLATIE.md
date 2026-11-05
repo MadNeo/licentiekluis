@@ -8,7 +8,35 @@ De wizard controleert de hosttools en installeert ontbrekende curl, CA-certifica
 
 In de container worden automatisch Caddy (HTTPS), .NET 10 SDK/runtime, benodigde systeembibliotheken, de nieuwste serverbroncode van GitHub `main` en de LicentieKluis-systemd-service geïnstalleerd. Internettoegang vanuit host én container is vereist, onder andere naar GitHub, Ubuntu-pakketbronnen, Microsoft en NuGet.
 
-## Starten
+## Direct starten vanaf GitHub (een plakcommando)
+
+Open **Proxmox → node → Shell** als root en plak het hele onderstaande blok. Handmatig downloaden of kopiëren is niet nodig. Vul het GitHub-token afgeschermd in wanneer daarom wordt gevraagd; het staat niet in je shellgeschiedenis. Het commando haalt de nieuwste installer van `main` op en start direct de wizard. De wizard neemt dit token over zonder het opnieuw te vragen. De container-, netwerk- en accountkeuzes blijven zichtbaar vóór aanmaken.
+
+```bash
+bash <<'LKV'
+set -Eeuo pipefail
+umask 077
+[[ $EUID -eq 0 && -d /etc/pve ]] || { echo "Start dit op de Proxmox-host als root."; exit 1; }
+if ! command -v curl >/dev/null || [[ ! -s /etc/ssl/certs/ca-certificates.crt ]]; then
+    apt-get update
+    apt-get install -y curl ca-certificates
+fi
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
+read -rsp "GitHub-token (Contents: Read voor MadNeo/licentiekluis): " token </dev/tty
+echo
+[[ "$token" =~ ^[A-Za-z0-9_]+$ ]] || { echo "Geen geldig GitHub-token ingevuld."; exit 1; }
+printf "Authorization: Bearer %s\nAccept: application/vnd.github.raw+json\n" "$token" > "$work/headers"
+curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+    --header @"$work/headers" \
+    "https://api.github.com/repos/MadNeo/licentiekluis/contents/scripts/install-proxmox.sh?ref=main" \
+    --output "$work/install-proxmox.sh"
+bash -n "$work/install-proxmox.sh"
+GITHUB_TOKEN="$token" bash "$work/install-proxmox.sh" </dev/tty
+LKV
+```
+
+## Starten met een gedownload bestand (alternatief)
 
 1. Download `install-proxmox.sh` naar je Windows-pc. Het bestand is ook beschikbaar in deze repository onder `scripts/` (bij een privérepository moet je ingelogd zijn).
 2. Kopieer het vanuit PowerShell naar de Proxmox-node; vervang `PROXMOX-IP` door het IP-adres van je node:

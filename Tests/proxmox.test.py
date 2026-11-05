@@ -47,11 +47,12 @@ elif name=='pct':
             target=root/'installer.sh';target.write_text(script)
             # ID, hostname, two storages, bridge, IP, VLAN, CPU, RAM, disk, DNS, account, passwords, token, confirmation.
             answers=['']*11+['admin','very-secret-password','very-secret-password','github-secret-token','ja']
+            if scenario=='inherited-token': answers.pop(-2)
             if scenario=='static':
                 answers[5]='192.168.178.51/24';answers.insert(6,'192.168.178.1')
             result=subprocess.run(['bash',str(target)],input='\n'.join(answers)+'\n',text=True,capture_output=True,
-                env=dict(os.environ,PATH=str(commands)+':'+os.environ['PATH'],TEST_ROOT=str(root),SCENARIO=scenario),timeout=30)
-            self.assertEqual(result.returncode==0,scenario in ['success','static'],result.stdout+result.stderr)
+                env=dict(os.environ,PATH=str(commands)+':'+os.environ['PATH'],TEST_ROOT=str(root),SCENARIO=scenario,GITHUB_TOKEN='github-secret-token' if scenario=='inherited-token' else ''),timeout=30)
+            self.assertEqual(result.returncode==0,scenario in ['success','static','inherited-token'],result.stdout+result.stderr)
             calls=(root/'calls').read_text()
             self.assertNotIn('very-secret-password',calls);self.assertNotIn('github-secret-token',calls)
             self.assertNotIn('"destroy"',calls);self.assertNotIn('"stop"',calls)
@@ -62,6 +63,7 @@ elif name=='pct':
                 self.assertIn('"--unprivileged", "1"',calls)
                 self.assertIn('"/etc/licentiekluis/github-token", "--perms", "0600"',calls)
             if scenario in ['no-network','install-failure']: self.assertIn('behouden',result.stderr)
+    def test_token_passed_by_bootstrap(self): self.exercise('inherited-token')
     def test_static_network(self): self.exercise('static')
     def test_success(self): self.exercise('success')
     def test_existing_guest_not_touched(self): self.exercise('occupied')

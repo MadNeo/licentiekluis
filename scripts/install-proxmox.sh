@@ -89,7 +89,11 @@ main() {
     read -rsp 'Serverwachtwoord (minimaal 14 tekens): ' password; echo
     read -rsp 'Herhaal serverwachtwoord: ' repeat; echo
     [[ ${#password} -ge 14 && "$password" == "$repeat" ]] || fail 'Wachtwoorden verschillen of zijn te kort.'
-    read -rsp 'GitHub-token met Contents: Read voor MadNeo/licentiekluis (Enter bij openbare repository): ' token; echo
+    token=${GITHUB_TOKEN:-}
+    unset GITHUB_TOKEN
+    if [[ -z "$token" ]]; then
+        read -rsp 'GitHub-token met Contents: Read voor MadNeo/licentiekluis (Enter bij openbare repository): ' token; echo
+    fi
     [[ "$token" != *$'\r'* && "$token" != *'"'* && "$token" != *'\'* ]] || fail 'Ongeldig token.'
     printf '\nNieuwe LXC %s (%s): %s CPU, %s MB RAM, %s GB op %s\nNetwerk: %s, %s, VLAN %s\n' "$ctid" "$hostname" "$cores" "$memory" "$disk" "$root_storage" "$bridge" "$cidr" "$vlan"
     printf 'Ubuntu 24.04; onbevoorrecht; automatisch starten bij boot.\nGitHub-token wordt alleen in de LXC als root-only bestand opgeslagen voor upgrade.\n'
