@@ -120,6 +120,7 @@ impl App {
         let mut paint_handlers=vec![];
         for (parent,design) in [(&window,(1180,780)),(&settings_window,(720,520)),(&mail_window,(920,680))] {
             let panels=decorations.iter().filter(|(handle,_)|*handle==parent.handle).map(|(_,panel)|*panel).collect();
+            render::fit_children(parent,design);
             paint_handlers.push(render::bind(parent,panels,design)?);
             parent.invalidate();
         }
