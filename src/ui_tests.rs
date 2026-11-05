@@ -10,9 +10,13 @@ unsafe fn paint_now(window: &nwg::Window) {
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     RedrawWindow(hwnd, ptr::null(), ptr::null_mut(),
         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_FRAME);
-    let mut msg: MSG = mem::zeroed();
-    while PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
-        TranslateMessage(&msg); DispatchMessageW(&msg);
+    // Give newly shown owned windows time to paint before capturing them.
+    for _ in 0..20 {
+        let mut msg: MSG = mem::zeroed();
+        while PeekMessageW(&mut msg, ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+            TranslateMessage(&msg); DispatchMessageW(&msg);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
     }
 }
 
@@ -36,7 +40,7 @@ unsafe fn snapshot(hwnd: HWND, path: &std::path::Path) {
     let screen = GetDC(hwnd); let dc = CreateCompatibleDC(screen);
     let bitmap = CreateCompatibleBitmap(screen, width, height);
     let old = SelectObject(dc, bitmap as _);
-    assert_ne!(PrintWindow(hwnd, dc, 2), 0, "Native window capture failed");
+    assert_ne!(PrintWindow(hwnd, dc, 0), 0, "Native window capture failed");
     SelectObject(dc, old);
     let mut info: BITMAPINFO = mem::zeroed();
     info.bmiHeader.biSize = mem::size_of::<BITMAPINFOHEADER>() as u32;
@@ -47,6 +51,8 @@ unsafe fn snapshot(hwnd: HWND, path: &std::path::Path) {
     let lines = GetDIBits(dc, bitmap, 0, height as u32, pixels.as_mut_ptr() as _, &mut info, DIB_RGB_COLORS);
     DeleteObject(bitmap as _); DeleteDC(dc); ReleaseDC(hwnd, screen);
     assert_eq!(lines, height, "Pixel capture incomplete");
+    let bright = pixels.chunks_exact(4).filter(|p| p[0] > 180 && p[1] > 180 && p[2] > 180).count();
+    assert!(bright > (width*height/3) as usize, "Window capture must show its light interface, not a blank black frame");
     let mut out = Vec::new();
     out.extend_from_slice(b"BM"); out.extend_from_slice(&(54+pixels.len() as u32).to_le_bytes());
     out.extend_from_slice(&[0;4]); out.extend_from_slice(&54u32.to_le_bytes());
