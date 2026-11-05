@@ -33,7 +33,8 @@ jobs:
       - run: dotnet publish Server/LicenseVault.Server.csproj -c Release --self-contained false -p:UseAppHost=false -o output/Server
       - run: node Tests/web.test.cjs
       - run: node Tests/mail.test.cjs
-      - run: bash -n scripts/*.sh
+      - run: for script in scripts/*.sh; do bash -n "$script"; done
+      - run: python3 Tests/upgrade.test.py
       - run: sudo apt-get update && sudo apt-get install -y shellcheck
       - run: shellcheck -S error scripts/*.sh
       - uses: actions/upload-artifact@v4

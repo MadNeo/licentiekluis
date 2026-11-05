@@ -21,7 +21,7 @@ cleanup() {
         if (( swapped )); then
             if [[ -d /opt/licentiekluis/app ]]; then mv /opt/licentiekluis/app "$backup_dir/failed-app"; fi
             if ! cp -a "$backup_dir/app" /opt/licentiekluis/app; then echo 'Programmaherstel mislukt; server blijft gestopt.' >&2; exit 1; fi
-            mv /var/lib/licentiekluis "$backup_dir/failed-data"
+            if ! mv /var/lib/licentiekluis "$backup_dir/failed-data"; then echo 'Gegevensherstel geblokkeerd; server blijft gestopt.' >&2; exit 1; fi
             if ! tar -C /var/lib -xzf "$backup_dir/data.tar.gz"; then
                 echo "HERSTEL MISLUKT. Server blijft gestopt. Back-up: $backup_dir" >&2
                 exit 1
