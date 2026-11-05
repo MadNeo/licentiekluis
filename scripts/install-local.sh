@@ -8,7 +8,13 @@ source /etc/os-release
 [[ ! -e /opt/licentiekluis && ! -e /var/lib/licentiekluis ]] || { echo 'Bestaande installatie gevonden. Gebruik upgrade; data niet overschreven.'; exit 1; }
 [[ ! -e /etc/caddy/Caddyfile ]] || { echo 'Gebruik een lege, aparte LXC; er bestaat al een Caddy-configuratie.'; exit 1; }
 source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-read -rp 'Vast IP-adres of lokale DNS-naam van deze LXC (zonder https://): ' server_name
+server_name=${LKV_SERVER_NAME:-}
+if [[ -z "$server_name" ]]; then read -rp 'Vast IP-adres of lokale DNS-naam van deze LXC (zonder https://): ' server_name; fi
+init_file=${LKV_INIT_FILE:-}
+if [[ -n "$init_file" ]]; then
+    [[ -f "$init_file" && $(stat -c '%u:%a' "$init_file") == 0:600 ]] || { echo 'Initialisatiebestand moet root en chmod 600 hebben.'; exit 1; }
+    trap 'rm -f -- "$init_file"' EXIT
+fi
 [[ "$server_name" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]] || { echo 'Ongeldige hostnaam / IPv4-adres.'; exit 1; }
 apt-get update
 apt-get install -y ca-certificates curl caddy libicu74 libssl3t64 zlib1g
@@ -23,7 +29,12 @@ export DOTNET_ROOT=/opt/licentiekluis/dotnet
 /opt/licentiekluis/dotnet/dotnet publish "$source_dir/Server/LicenseVault.Server.csproj" -c Release --self-contained false -p:UseAppHost=false -o /opt/licentiekluis/app
 cp "$source_dir/GITHUB-REVISION" /opt/licentiekluis/app/GITHUB-REVISION
 chmod -R a+rX /opt/licentiekluis/app
-LKV_DATA=/var/lib/licentiekluis /opt/licentiekluis/dotnet/dotnet /opt/licentiekluis/app/LicenseVault.Server.dll --init
+if [[ -n "$init_file" ]]; then
+    LKV_DATA=/var/lib/licentiekluis /opt/licentiekluis/dotnet/dotnet /opt/licentiekluis/app/LicenseVault.Server.dll --init-stdin < "$init_file"
+    rm -f -- "$init_file"
+else
+    LKV_DATA=/var/lib/licentiekluis /opt/licentiekluis/dotnet/dotnet /opt/licentiekluis/app/LicenseVault.Server.dll --init
+fi
 chown -R licentiekluis:licentiekluis /var/lib/licentiekluis
 cat > /etc/systemd/system/licentiekluis.service <<'UNIT'
 [Unit]
@@ -78,3 +89,4 @@ echo 'De .NET runtime is lokaal geinstalleerd. Bij bouwen uit broncode is ook de
 
 bash "$source_dir/scripts/register-upgrade.sh"
 echo "Voortaan bijwerken met: upgrade"
+

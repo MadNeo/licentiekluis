@@ -11,12 +11,12 @@ using System.Text;
 var dataDir = Environment.GetEnvironmentVariable("LKV_DATA") ?? Path.Combine(AppContext.BaseDirectory, "data");
 Directory.CreateDirectory(dataDir);
 var configPath = Path.Combine(dataDir, "secrets.json");
-if (args.Contains("--init"))
+if (args.Contains("--init") || args.Contains("--init-stdin"))
 {
     if (File.Exists(configPath)) throw new InvalidOperationException("Configuratie bestaat al; niet overschreven.");
     Console.Write("Beheerdersnaam: "); var user = Console.ReadLine()?.Trim() ?? "";
-    Console.Write("Wachtwoord (minimaal 14 tekens): "); var password = ReadPassword();
-    Console.Write("Herhaal wachtwoord: "); var repeat = ReadPassword();
+    Console.Write("Wachtwoord (minimaal 14 tekens): "); var password = args.Contains("--init-stdin") ? Console.ReadLine() ?? "" : ReadPassword();
+    Console.Write("Herhaal wachtwoord: "); var repeat = args.Contains("--init-stdin") ? Console.ReadLine() ?? "" : ReadPassword();
     if (user.Length == 0 || password.Length < 14 || password != repeat) throw new ArgumentException("Naam of wachtwoord ongeldig.");
     var salt = RandomNumberGenerator.GetBytes(16);
     var auth = new Config(user, Convert.ToBase64String(salt), Convert.ToBase64String(Rfc2898DeriveBytes.Pbkdf2(password, salt, 600000, HashAlgorithmName.SHA256, 32)), Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
@@ -184,3 +184,4 @@ class SmtpSettingsStore
     public string Password { get; set; } = "";
     public SmtpSettings ToSettings() => new(Host, Port, From, Username, Password);
 }
+
