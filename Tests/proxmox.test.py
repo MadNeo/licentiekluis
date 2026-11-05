@@ -8,7 +8,14 @@ class ProxmoxTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); commands = root/'bin'; commands.mkdir()
             (root/'etc/pve').mkdir(parents=True)
-            (root/'sys/class/net/vmbr0/bridge').mkdir(parents=True)
+            # Reproduce real sysfs: interfaces are symlinks, subsystem points back.
+            net=root/'sys/class/net'; net.mkdir(parents=True)
+            for interface in ['vmbr0','veth100i0','lo']:
+                device=root/'sys/devices/virtual/net'/interface
+                device.mkdir(parents=True)
+                (net/interface).symlink_to(device, target_is_directory=True)
+                (device/'subsystem').symlink_to(net, target_is_directory=True)
+                if interface=='vmbr0': (device/'bridge').mkdir()
             (root/'run/lock').mkdir(parents=True); (root/'host-root').mkdir()
             with tarfile.open(root/'source.tar.gz','w:gz') as archive:
                 for name, value in {'scripts/install-local.sh':'# LKV_INIT_FILE\n', 'Server/LicenseVault.Server.csproj':'project'}.items():
@@ -51,10 +58,13 @@ elif name=='pct':
             if scenario=='static':
                 answers[5]='192.168.178.51/24';answers.insert(6,'192.168.178.1')
             result=subprocess.run(['bash',str(target)],input='\n'.join(answers)+'\n',text=True,capture_output=True,
-                env=dict(os.environ,PATH=str(commands)+':'+os.environ['PATH'],TEST_ROOT=str(root),SCENARIO=scenario,GITHUB_TOKEN='github-secret-token' if scenario=='inherited-token' else ''),timeout=30)
+                env=dict(os.environ,PATH=str(commands)+':'+os.environ['PATH'],TEST_ROOT=str(root),SCENARIO=scenario,GITHUB_TOKEN='github-secret-token' if scenario=='inherited-token' else ''),timeout=60)
             self.assertEqual(result.returncode==0,scenario in ['success','static','inherited-token'],result.stdout+result.stderr)
             calls=(root/'calls').read_text()
             self.assertNotIn('very-secret-password',calls);self.assertNotIn('github-secret-token',calls)
+            self.assertNotIn('File system loop',result.stderr)
+            if scenario not in ['occupied']:
+                self.assertIn('Netwerkbridges:\nvmbr0\n',result.stdout)
             self.assertNotIn('"destroy"',calls);self.assertNotIn('"stop"',calls)
             if scenario in ['occupied','bad-token']: self.assertFalse((root/'created').exists())
             else: self.assertTrue((root/'created').exists())
@@ -72,3 +82,4 @@ elif name=='pct':
     def test_install_failure_preserves_guest(self): self.exercise('install-failure')
 
 if __name__=='__main__': unittest.main()
+

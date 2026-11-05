@@ -67,7 +67,14 @@ main() {
     valid_name "$hostname" || fail 'Ongeldige containernaam.'
     choose_storage root_storage rootdir 'Beschikbare opslag voor de containerdisk'
     choose_storage template_storage vztmpl 'Beschikbare opslag voor Ubuntu-templates'
-    printf 'Netwerkbridges:\n'; find -L /sys/class/net -maxdepth 2 -name bridge -printf '%h\n' | sed 's|.*/||'
+    printf 'Netwerkbridges:\n'
+    # Inspect only the bridge marker; never recursively follow sysfs symlinks.
+    local bridge_path
+    for bridge_path in /sys/class/net/*; do
+        if [[ -d "$bridge_path/bridge" ]]; then
+            printf '%s\n' "${bridge_path##*/}"
+        fi
+    done
     ask bridge 'Netwerkbridge' vmbr0
     [[ "$bridge" =~ ^[a-zA-Z0-9_.-]+$ && -d /sys/class/net/"$bridge"/bridge ]] || fail 'Deze netwerkbridge bestaat niet.'
     ask cidr 'IPv4/CIDR of dhcp (vast IP aanbevolen)' dhcp
@@ -160,3 +167,4 @@ main() {
 }
 # Sourceable validation helpers for isolated tests; normal execution runs the wizard.
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi
+
