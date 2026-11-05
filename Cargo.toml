@@ -1,6 +1,6 @@
 [package]
 name = "licentiekluis-native"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 license = "MIT"
 description = "Native Windows license vault with offline encrypted storage"
@@ -22,6 +22,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 
 [target.'cfg(windows)'.dependencies]
 native-windows-gui = "1.0.13"
+winapi = { version = "0.3.9", features = ["winuser", "wingdi"] }
 clipboard-win = "5.4"
 open = "5.3"
 

@@ -1,5 +1,7 @@
 use anyhow::{ensure,Context,Result};
 use native_windows_gui as nwg;
+#[path = "ui_render.rs"] mod render;
+#[cfg(test)] #[path = "ui_tests.rs"] mod tests;
 use licentiekluis_native::{model::{Entry,Installation,LocalState},vault,sync::{self,Session},mail};
 use std::{cell::{Cell,RefCell},path::PathBuf,rc::Rc,sync::{Arc,Mutex},time::{Duration,Instant}};
 use uuid::Uuid;
@@ -11,7 +13,7 @@ const UNLOCK:usize=0;const NEW:usize=1;const SAVE:usize=2;const DELETE:usize=3;c
 type WorkResult=std::result::Result<(LocalState,Session),String>;
 
 struct App {
-    settings_window:nwg::Window,_fonts:Vec<nwg::Font>,
+    paint_handlers:Vec<nwg::RawEventHandler>,settings_window:nwg::Window,_fonts:Vec<nwg::Font>,
     mail_window:nwg::Window,mail_licenses:nwg::ListBox<String>,mail_to:nwg::TextInput,mail_subject:nwg::TextInput,mail_preview:nwg::TextBox,mail_buttons:Vec<nwg::Button>,mail_entries:RefCell<Vec<Entry>>,mail_draft:RefCell<Option<mail::Draft>>,mail_result:Arc<Mutex<Option<std::result::Result<mail::Outcome,String>>>>,
     window:nwg::Window, labels:Vec<nwg::Label>, fields:Vec<nwg::TextInput>, buttons:Vec<nwg::Button>,
     people:nwg::ListBox<String>, licenses:nwg::ListBox<String>, owner:nwg::ComboBox<String>, platform:nwg::ComboBox<String>, filter:nwg::ComboBox<String>,
@@ -42,12 +44,14 @@ impl App {
         let mut small=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(13).build(&mut small)?;
         let mut strong=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(15).weight(600).build(&mut strong)?;
         let mut mono=nwg::Font::default();nwg::Font::builder().family("Consolas").size(15).build(&mut mono)?;
-        let mut window=nwg::Window::default();nwg::Window::builder().size((1180,780)).position((30,20)).title("LicentieKluis 0.4.0").flags(nwg::WindowFlags::WINDOW|nwg::WindowFlags::VISIBLE|nwg::WindowFlags::MINIMIZE_BOX).build(&mut window)?;
+        let mut window=nwg::Window::default();nwg::Window::builder().size((1180,780)).position((30,20)).title("LicentieKluis 0.4.1").flags(nwg::WindowFlags::WINDOW|nwg::WindowFlags::VISIBLE|nwg::WindowFlags::MINIMIZE_BOX).build(&mut window)?;
         let mut settings_window=nwg::Window::default();nwg::Window::builder().size((720,520)).position((180,90)).title("Verbinding & back-up · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut settings_window)?;
         let mut mail_window=nwg::Window::default();nwg::Window::builder().size((920,680)).position((100,50)).title("Licenties delen · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut mail_window)?;
         let mut labels=vec![];
+        let mut decorations:Vec<(nwg::ControlHandle,render::Panel)>=vec![];
         let bg=[243,246,250];let white=[255,255,255];let mint=[228,245,241];let teal=[20,139,125];
         let mut label=|parent:&nwg::Window,text:&str,x,y,w,h,color,font:&nwg::Font|->Result<()>{
+            if text.is_empty(){decorations.push((parent.handle.clone(),(x,y,w,h,color)));return Ok(());}
             let mut l=nwg::Label::default();nwg::Label::builder().parent(parent).text(text).position((x,y)).size((w,h)).background_color(Some(color)).font(Some(font)).build(&mut l)?;labels.push(l);Ok(())
         };
         label(&window,"",0,0,1180,780,bg,&small)?;
@@ -113,7 +117,13 @@ impl App {
         let mut mail_preview=nwg::TextBox::default();nwg::TextBox::builder().parent(&mail_window).position((382,288)).size((502,276)).readonly(true).flags(nwg::TextBoxFlags::VISIBLE|nwg::TextBoxFlags::TAB_STOP|nwg::TextBoxFlags::VSCROLL|nwg::TextBoxFlags::AUTOVSCROLL).build(&mut mail_preview)?;
         let mut mail_buttons=vec![];for (text,x,y,w) in [("Voorbeeld maken",20,604,160),("Via server versturen",192,604,184),("Open mailprogramma",388,604,200),("Sluiten",764,604,136),("Alles selecteren",36,538,144),("Selectie wissen",190,538,144)]{let mut b=nwg::Button::default();nwg::Button::builder().parent(&mail_window).position((x,y)).size((w,32)).text(text).font(Some(&strong)).build(&mut b)?;mail_buttons.push(b);}
         drop(label);
-        Ok(Self{settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
+        let mut paint_handlers=vec![];
+        for (parent,design) in [(&window,(1180,780)),(&settings_window,(720,520)),(&mail_window,(920,680))] {
+            let panels=decorations.iter().filter(|(handle,_)|*handle==parent.handle).map(|(_,panel)|*panel).collect();
+            paint_handlers.push(render::bind(parent,panels,design)?);
+            parent.invalidate();
+        }
+        Ok(Self{paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
     }
     fn error(&self,e:anyhow::Error){self.modal.set(true);nwg::modal_error_message(&self.window,"Bewerking niet voltooid",&format!("{e:#}"));self.modal.set(false);}
     fn confirm(&self,text:&str)->bool{self.modal.set(true);let result=nwg::modal_message(&self.window,&nwg::MessageParams{title:"LicentieKluis",content:text,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning});self.modal.set(false);result==nwg::MessageChoice::Yes}
@@ -218,4 +228,8 @@ impl App {
     }
     fn clear_clipboard(&self){if let Some((value,_))=self.copied.borrow_mut().take(){if clipboard_win::get_clipboard_string().ok().as_deref()==Some(value.as_str()){let _=clipboard_win::set_clipboard_string("");}}}
     fn tick(&self){let expire=self.copied.borrow().as_ref().is_some_and(|(_,t)|t.elapsed()>Duration::from_secs(30));if expire{self.clear_clipboard();}if self.revealed.get().is_some_and(|t|t.elapsed()>Duration::from_secs(30)){self.fields[CODE].set_password_char(Some('*'));self.revealed.set(None);}if !self.busy.get()&&!self.dirty.get()&&!self.modal.get()&&self.session.borrow().is_some()&&self.last_sync.get().elapsed()>Duration::from_secs(60){self.last_sync.set(Instant::now());if let Err(e)=self.begin_work(false){self.status.set_text(&e.to_string());}}}
+}
+
+impl Drop for App {
+    fn drop(&mut self){for handler in &self.paint_handlers {let _=nwg::unbind_raw_event_handler(handler);}}
 }
