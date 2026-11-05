@@ -11,7 +11,7 @@ cleanup() {
     rc=$?
     trap - EXIT
     if (( created )); then
-        pct exec "$ctid" -- rm -f /root/licentiekluis-init.txt 2>/dev/null || true
+        timeout --kill-after=1 5 pct exec "$ctid" -- rm -f /root/licentiekluis-init.txt 2>/dev/null || true
         if (( ! complete )); then
             printf '\nInstallatie niet voltooid. Container %s is behouden voor onderzoek.\n' "$ctid" >&2
             printf 'Open de console met: pct enter %s\nEr is geen bestaande container verwijderd.\n' "$ctid" >&2
@@ -129,14 +129,18 @@ main() {
     [[ -z "$gateway" ]] || net+=",gw=$gateway"
     (( 10#$vlan == 0 )) || net+=",tag=$((10#$vlan))"
     # pct itself rejects an occupied ID; never stop/destroy an existing guest.
-    pct create "$ctid" "$template" --hostname "$hostname" --ostype ubuntu --unprivileged 1 \
+    # Proxmox generates system/network files using the inherited umask.
+    # Keep secrets at 077, but create/start the guest with normal OS permissions.
+    (umask 022; pct create "$ctid" "$template" --hostname "$hostname" --ostype ubuntu --unprivileged 1 \
         --cores "$cores" --memory "$memory" --swap 512 --rootfs "$root_storage:$disk" \
-        --net0 "$net" --onboot 1 --description 'LicentieKluis: versleutelde licentieserver; update binnen LXC met upgrade'
+        --net0 "$net" --onboot 1 --description 'LicentieKluis: versleutelde licentieserver; update binnen LXC met upgrade')
     created=1
-    pct start "$ctid"
+    (umask 022; pct start "$ctid")
+    printf 'Wachten op IPv4-adres van container %s (maximaal circa 3 minuten)...\n' "$ctid"
     ip=''
-    for _ in {1..60}; do
-        ip=$(pct exec "$ctid" -- ip -4 -o addr show dev eth0 scope global 2>/dev/null | awk '{split($4,a,"/");print a[1];exit}') || true
+    for attempt in {1..20}; do
+        printf 'Netwerkcontrole %s/20...\n' "$attempt"
+        ip=$(timeout --kill-after=1 5 pct exec "$ctid" -- ip -4 -o addr show dev eth0 scope global 2>/dev/null | awk '{split($4,a,"/");print a[1];exit}') || true
         [[ -z "$ip" ]] || break
         sleep 2
     done

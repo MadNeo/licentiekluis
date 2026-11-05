@@ -35,7 +35,13 @@ elif name=='curl':
     if scenario=='bad-token': sys.exit(22)
     shutil.copy(root/'source.tar.gz',args[args.index('-o')+1])
 elif name=='pct':
-    if args[0]=='create': (root/'created').touch()
+    if args[0] in ['create','start']:
+        mode=os.umask(0);os.umask(mode)
+        assert mode==0o022, 'pct must not inherit secret-only umask'
+    if args[0]=='create':
+        (root/'created').touch()
+        generated=root/'network-config';generated.mkdir()
+        assert generated.stat().st_mode & 0o777 == 0o755
     if args[0]=='push':
         if args[3].endswith('licentiekluis-init.txt'):
             assert Path(args[2]).read_text()=='admin\\nvery-secret-password\\nvery-secret-password\\n'
