@@ -11,6 +11,7 @@ const UNLOCK:usize=0;const NEW:usize=1;const SAVE:usize=2;const DELETE:usize=3;c
 type WorkResult=std::result::Result<(LocalState,Session),String>;
 
 struct App {
+    settings_window:nwg::Window,_fonts:Vec<nwg::Font>,
     mail_window:nwg::Window,mail_licenses:nwg::ListBox<String>,mail_to:nwg::TextInput,mail_subject:nwg::TextInput,mail_preview:nwg::TextBox,mail_buttons:Vec<nwg::Button>,mail_entries:RefCell<Vec<Entry>>,mail_draft:RefCell<Option<mail::Draft>>,mail_result:Arc<Mutex<Option<std::result::Result<mail::Outcome,String>>>>,
     window:nwg::Window, labels:Vec<nwg::Label>, fields:Vec<nwg::TextInput>, buttons:Vec<nwg::Button>,
     people:nwg::ListBox<String>, licenses:nwg::ListBox<String>, owner:nwg::ComboBox<String>, platform:nwg::ComboBox<String>, filter:nwg::ComboBox<String>,
@@ -29,43 +30,90 @@ pub fn run()->Result<()> {
     let handler=nwg::full_bind_event_handler(&app.window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){app.event(event,handle);}});
     app.status.set_text("Vergrendeld. Nieuwe kluis: kies minimaal 14 tekens en herhaal het wachtwoord.");
     let weak=Rc::downgrade(&app);let mail_handler=nwg::full_bind_event_handler(&app.mail_window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){app.mail_event(event,handle);}});
-    nwg::dispatch_thread_events();nwg::unbind_event_handler(&mail_handler);nwg::unbind_event_handler(&handler);drop(app);drop(lock);Ok(())
+    let weak=Rc::downgrade(&app);let settings_handler=nwg::full_bind_event_handler(&app.settings_window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){if event==nwg::Event::OnWindowClose{app.settings_window.set_visible(false);}else{app.event(event,handle);}}});
+    nwg::dispatch_thread_events();nwg::unbind_event_handler(&settings_handler);nwg::unbind_event_handler(&mail_handler);nwg::unbind_event_handler(&handler);drop(app);drop(lock);Ok(())
 }
 impl App {
     fn build(path:PathBuf)->Result<Self> {
-        let mut window=nwg::Window::default();nwg::Window::builder().size((1200,800)).position((80,40)).title("LicentieKluis Rust · native Windows · 0.3.0 broncodepreview").build(&mut window)?;
-        let mut labels=vec![];let mut label=|text:&str,x,y,w|->Result<()>{let mut l=nwg::Label::default();nwg::Label::builder().text(text).parent(&window).position((x,y)).size((w,22)).build(&mut l)?;labels.push(l);Ok(())};
-        label("LICENTIEKLUIS   /   Lokaal werken, veilig synchroniseren",20,14,900)?;
-        label("Lokaal kluiswachtwoord",20,45,200)?;label("Herhaal (alleen nieuwe kluis)",240,45,210)?;
-        label("GEBRUIKERS",20,124,220)?;label("LICENTIES",260,124,360)?;label("LICENTIE BEWERKEN",650,124,500)?;
-        label("Gebruikersnaam toevoegen / wijzigen",20,474,230)?;
-        for (text,y) in [("Software",150),("Licentiecode",210),("Versie",270),("Einddatum (jjjj-mm-dd, of leeg)",330)]{label(text,650,y,250)?;}
-        label("Toegewezen aan",920,150,250)?;label("Installaties: platform en apparaat",650,390,500)?;label("Opmerkingen",650,548,500)?;
-        label("HTTPS-serveradres",20,630,380)?;label("Serveraccount",420,630,210)?;label("Serverwachtwoord",650,630,250)?;
-        label("Wachtwoord back-up (alleen voor herstellen)",650,727,340)?;
-        let positions=[(20,68,205),(240,68,205),(260,95,230),(20,500,220),(650,174,250),(650,234,400),(650,294,250),(650,354,250),(820,417,225),(20,654,380),(420,654,210),(650,654,250),(650,752,250)];
+        let mut body=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(15).build(&mut body)?;
+        nwg::Font::set_global_default(Some(body));
+        let mut title=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(28).weight(650).build(&mut title)?;
+        let mut heading=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(18).weight(600).build(&mut heading)?;
+        let mut small=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(13).build(&mut small)?;
+        let mut strong=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(15).weight(600).build(&mut strong)?;
+        let mut mono=nwg::Font::default();nwg::Font::builder().family("Consolas").size(15).build(&mut mono)?;
+        let mut window=nwg::Window::default();nwg::Window::builder().size((1180,780)).position((30,20)).title("LicentieKluis 0.4.0").flags(nwg::WindowFlags::WINDOW|nwg::WindowFlags::VISIBLE|nwg::WindowFlags::MINIMIZE_BOX).build(&mut window)?;
+        let mut settings_window=nwg::Window::default();nwg::Window::builder().size((720,520)).position((180,90)).title("Verbinding & back-up · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut settings_window)?;
+        let mut mail_window=nwg::Window::default();nwg::Window::builder().size((920,680)).position((100,50)).title("Licenties delen · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut mail_window)?;
+        let mut labels=vec![];
+        let bg=[243,246,250];let white=[255,255,255];let mint=[228,245,241];let teal=[20,139,125];
+        let mut label=|parent:&nwg::Window,text:&str,x,y,w,h,color,font:&nwg::Font|->Result<()>{
+            let mut l=nwg::Label::default();nwg::Label::builder().parent(parent).text(text).position((x,y)).size((w,h)).background_color(Some(color)).font(Some(font)).build(&mut l)?;labels.push(l);Ok(())
+        };
+        label(&window,"",0,0,1180,780,bg,&small)?;
+        label(&window,"",0,0,1180,80,white,&small)?;
+        label(&window,"",0,0,6,80,teal,&small)?;
+        label(&window,"LicentieKluis",24,13,440,34,white,&title)?;
+        label(&window,"Al je softwarelicenties. Veilig op één plek.",26,50,620,22,white,&small)?;
+        label(&window,"",20,96,1140,72,mint,&small)?;
+        label(&window,"",20,96,4,72,teal,&small)?;
+        label(&window,"Kluiswachtwoord",36,106,204,20,mint,&small)?;
+        label(&window,"Herhalen bij een nieuwe kluis",254,106,228,20,mint,&small)?;
+        label(&window,"Lokaal versleuteld opgeslagen",666,108,300,20,mint,&strong)?;
+        label(&window,"Je kunt ook zonder server blijven werken.",666,133,340,22,mint,&small)?;
+        for (x,w) in [(20,208),(244,326),(586,574)] {label(&window,"",x,184,w,540,white,&small)?;}
+        label(&window,"Gebruikers",36,200,176,26,white,&heading)?;
+        label(&window,"Kies een licentiehouder",36,230,176,22,white,&small)?;
+        label(&window,"Naam gebruiker",36,540,176,20,white,&small)?;
+        label(&window,"Licenties",260,200,292,26,white,&heading)?;
+        label(&window,"Zoek op software, versie of apparaat",260,230,292,22,white,&small)?;
+        label(&window,"Licentiegegevens",604,200,530,26,white,&heading)?;
+        for (text,x,y,w) in [("Software",604,246,254),("Toegewezen aan",874,246,268),("Licentiecode",604,308,538),("Versie",604,370,160),("Geldig tot (jjjj-mm-dd, of leeg)",780,370,244),("Platform",604,432,144),("Apparaat",764,432,230),("Opmerkingen",604,570,538)] {
+            label(&window,text,x,y,w,22,white,&small)?;
+        }
+        label(&window,"Beheer de installaties waarop deze licentie wordt gebruikt.",604,540,538,22,white,&small)?;
+        label(&window,"",20,738,4,26,teal,&small)?;
+        label(&settings_window,"",0,0,720,520,bg,&small)?;
+        label(&settings_window,"Verbinding & back-up",24,18,664,36,bg,&title)?;
+        label(&settings_window,"Synchroniseer wanneer je wilt. Je lokale kluis blijft beschikbaar.",24,59,664,24,bg,&small)?;
+        label(&settings_window,"",20,98,680,228,white,&small)?;
+        label(&settings_window,"Serververbinding",36,112,640,26,white,&heading)?;
+        for (text,x,y,w) in [("HTTPS-serveradres",36,149,648),("Serveraccount",36,215,252),("Serverwachtwoord",304,215,236)] {label(&settings_window,text,x,y,w,22,white,&small)?;}
+        label(&settings_window,"",20,342,680,150,white,&small)?;
+        label(&settings_window,"Back-up & herstel",36,356,648,26,white,&heading)?;
+        label(&settings_window,"Wachtwoord van de back-up (alleen bij herstellen)",36,394,420,22,white,&small)?;
+        label(&settings_window,"Bewaar je back-up ook buiten deze computer.",36,461,620,22,white,&small)?;
+        let positions=[(36,130,204),(254,130,228),(260,262,292),(36,566,176),(604,272,254),(604,334,352),(604,396,160),(780,396,244),(764,458,230),(36,175,648),(36,241,252),(304,241,236),(36,420,330)];
+        let placeholders=["Wachtwoord","Nogmaals (alleen eerste keer)","Zoeken…","Naam gebruiker","Bijvoorbeeld Microsoft Office","Licentiecode","Bijvoorbeeld 2024","Leeg = geen einddatum","Bijvoorbeeld laptop kantoor","https://192.168.178.100","Gebruikersnaam","Serverwachtwoord","Wachtwoord van de back-up"];
         let mut fields=vec![];
-        for (i,(x,y,w)) in positions.into_iter().enumerate(){let mut f=nwg::TextInput::default();nwg::TextInput::builder().parent(&window).position((x,y)).size((w,26)).password(if [PW,REPEAT,CODE,SERVERPW,BACKUPPW].contains(&i){Some('*')}else{None}).build(&mut f)?;fields.push(f);}
-        let specifications=[("Ontgrendelen",465,67,140),("Nieuwe licentie",260,586,115),("Opslaan",650,600,100),("Verwijderen",385,586,110),("Kopiëren",1060,234,110),("Code tonen",1060,270,110),("Toevoegen",20,538,105),("Hernoemen",135,538,105),("Verwijderen",20,578,105),("+",1055,417,50),("−",1115,417,50),("Aanmelden",920,654,125),("Synchroniseren",20,700,145),("Afmelden",175,700,110),("Conflicten",295,700,110),("Back-up",700,67,110),("Herstellen",820,67,110),("Vergrendelen",940,67,150),("Licenties mailen",420,700,185)];
-        let mut buttons=vec![];for (text,x,y,w) in specifications{let mut b=nwg::Button::default();nwg::Button::builder().text(text).parent(&window).position((x,y)).size((w,29)).build(&mut b)?;buttons.push(b);}
-        let mut people=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((20,150)).size((220,310)).build(&mut people)?;
-        let mut licenses=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((260,150)).size((360,420)).build(&mut licenses)?;
-        let mut owner=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((920,174)).size((250,200)).build(&mut owner)?;
-        let mut platform=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((650,417)).size((155,200)).collection(vec!["Windows".to_string(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut platform)?;
-        let mut filter=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((500,95)).size((120,200)).collection(vec!["Alle platforms".to_string(),"Windows".into(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut filter)?;
-        let mut installations=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((650,454)).size((520,82)).build(&mut installations)?;
-        let mut notes=nwg::TextBox::default();nwg::TextBox::builder().parent(&window).position((650,571)).size((395,27)).build(&mut notes)?;
-        let mut status=nwg::Label::default();nwg::Label::builder().parent(&window).position((20,751)).size((600,40)).build(&mut status)?;
+        for (i,(x,y,w)) in positions.into_iter().enumerate(){let mut f=nwg::TextInput::default();let parent=if i>=URL{&settings_window}else{&window};nwg::TextInput::builder().parent(parent).position((x,y)).size((w,28)).placeholder_text(Some(placeholders[i])).password(if [PW,REPEAT,CODE,SERVERPW,BACKUPPW].contains(&i){Some('●')}else{None}).build(&mut f)?;if i==CODE{f.set_font(Some(&mono));}fields.push(f);}
+        let specifications=[("Ontgrendelen",494,128,140),("Nieuwe licentie",260,666,142),("Opslaan",604,666,156),("Verwijderen",414,666,140),("Kopiëren",968,334,82),("Tonen",1060,334,82),("Toevoegen",36,606,176),("Hernoemen",36,646,176),("Verwijderen",36,686,176),("+",1006,458,60),("−",1078,458,64),("Aanmelden",556,239,128),("Synchroniseren",36,283,184),("Afmelden",232,283,132),("Conflicten",376,283,132),("Back-up maken",382,418,146),("Herstellen",540,418,144),("Vergrendelen",1018,128,126),("Licenties mailen",900,666,242),("Verbinding & back-up",920,25,224)];
+        let mut buttons=vec![];
+        for (i,(text,x,y,w)) in specifications.into_iter().enumerate(){let mut b=nwg::Button::default();let parent=if [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE].contains(&i){&settings_window}else{&window};nwg::Button::builder().text(text).parent(parent).position((x,y)).size((w,30)).font(Some(&strong)).build(&mut b)?;buttons.push(b);}
+        let mut people=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((36,262)).size((176,258)).build(&mut people)?;
+        let mut licenses=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((260,342)).size((292,306)).build(&mut licenses)?;
+        let mut owner=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((874,272)).size((268,200)).build(&mut owner)?;
+        let mut platform=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((604,458)).size((144,200)).collection(vec!["Windows".to_string(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut platform)?;
+        let mut filter=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((260,303)).size((292,200)).collection(vec!["Alle platforms".to_string(),"Windows".into(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut filter)?;
+        let mut installations=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((604,500)).size((538,34)).build(&mut installations)?;
+        let mut notes=nwg::TextBox::default();nwg::TextBox::builder().parent(&window).position((604,596)).size((538,52)).flags(nwg::TextBoxFlags::VISIBLE|nwg::TextBoxFlags::TAB_STOP|nwg::TextBoxFlags::VSCROLL|nwg::TextBoxFlags::AUTOVSCROLL).build(&mut notes)?;
+        let mut status=nwg::Label::default();nwg::Label::builder().parent(&window).position((36,740)).size((1108,34)).background_color(Some(bg)).font(Some(&small)).build(&mut status)?;
         let mut notice=nwg::Notice::default();nwg::Notice::builder().parent(&window).build(&mut notice)?;
         let mut timer=nwg::AnimationTimer::default();nwg::AnimationTimer::builder().parent(&window).interval(Duration::from_secs(1)).active(true).build(&mut timer)?;
-        let mut mail_window=nwg::Window::default();nwg::Window::builder().size((900,700)).position((140,70)).title("Licenties per e-mail delen").build(&mut mail_window)?;mail_window.set_visible(false);
-        let mut mail_licenses=nwg::ListBox::default();nwg::ListBox::builder().parent(&mail_window).position((20,45)).size((340,500)).flags(nwg::ListBoxFlags::VISIBLE | nwg::ListBoxFlags::MULTI_SELECT | nwg::ListBoxFlags::TAB_STOP).build(&mut mail_licenses)?;
-        for (text,x,y,w) in [("Klik meerdere licenties aan (maximaal 50)",20,15,350),("Ontvanger (een e-mailadres)",390,15,470),("Onderwerp",390,85,470),("Voorbeeld van de e-mail",390,155,470)]{let mut l=nwg::Label::default();nwg::Label::builder().text(text).parent(&mail_window).position((x,y)).size((w,24)).build(&mut l)?;labels.push(l);}
-        let mut mail_to=nwg::TextInput::default();nwg::TextInput::builder().parent(&mail_window).position((390,45)).size((470,28)).build(&mut mail_to)?;
-        let mut mail_subject=nwg::TextInput::default();nwg::TextInput::builder().parent(&mail_window).position((390,115)).size((470,28)).text("Softwarelicenties").build(&mut mail_subject)?;
-        let mut mail_preview=nwg::TextBox::default();nwg::TextBox::builder().parent(&mail_window).position((390,185)).size((470,360)).readonly(true).build(&mut mail_preview)?;
-        let mut mail_buttons=vec![];for (text,x,y,w) in [("Voorbeeld maken",20,570,170),("Via server versturen",200,570,200),("Open eigen mailprogramma",410,570,260),("Sluiten",690,570,170),("Alles selecteren",20,610,170),("Selectie wissen",200,610,170)]{let mut b=nwg::Button::default();nwg::Button::builder().parent(&mail_window).position((x,y)).size((w,32)).text(text).build(&mut b)?;mail_buttons.push(b);}
-        Ok(Self{mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
+        label(&mail_window,"",0,0,920,680,bg,&small)?;
+        label(&mail_window,"Licenties delen",24,18,872,36,bg,&title)?;
+        label(&mail_window,"Selecteer licenties, controleer het voorbeeld en kies hoe je wilt versturen.",24,61,872,22,bg,&small)?;
+        label(&mail_window,"",20,102,330,480,white,&small)?;label(&mail_window,"",366,102,534,480,white,&small)?;
+        label(&mail_window,"Selectie",36,116,298,26,white,&heading)?;
+        label(&mail_window,"Meerdere licenties mogelijk (maximaal 50)",36,150,298,22,white,&small)?;
+        let mut mail_licenses=nwg::ListBox::default();nwg::ListBox::builder().parent(&mail_window).position((36,184)).size((298,336)).flags(nwg::ListBoxFlags::VISIBLE|nwg::ListBoxFlags::MULTI_SELECT|nwg::ListBoxFlags::TAB_STOP).build(&mut mail_licenses)?;
+        for (text,y) in [("Ontvanger",116),("Onderwerp",188),("Voorbeeld van de e-mail",260)]{label(&mail_window,text,382,y,502,22,white,&small)?;}
+        let mut mail_to=nwg::TextInput::default();nwg::TextInput::builder().parent(&mail_window).position((382,144)).size((502,28)).placeholder_text(Some("naam@voorbeeld.nl")).build(&mut mail_to)?;
+        let mut mail_subject=nwg::TextInput::default();nwg::TextInput::builder().parent(&mail_window).position((382,216)).size((502,28)).text("Softwarelicenties").build(&mut mail_subject)?;
+        let mut mail_preview=nwg::TextBox::default();nwg::TextBox::builder().parent(&mail_window).position((382,288)).size((502,276)).readonly(true).flags(nwg::TextBoxFlags::VISIBLE|nwg::TextBoxFlags::TAB_STOP|nwg::TextBoxFlags::VSCROLL|nwg::TextBoxFlags::AUTOVSCROLL).build(&mut mail_preview)?;
+        let mut mail_buttons=vec![];for (text,x,y,w) in [("Voorbeeld maken",20,604,160),("Via server versturen",192,604,184),("Open mailprogramma",388,604,200),("Sluiten",764,604,136),("Alles selecteren",36,538,144),("Selectie wissen",190,538,144)]{let mut b=nwg::Button::default();nwg::Button::builder().parent(&mail_window).position((x,y)).size((w,32)).text(text).font(Some(&strong)).build(&mut b)?;mail_buttons.push(b);}
+        drop(label);
+        Ok(Self{settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
     }
     fn error(&self,e:anyhow::Error){self.modal.set(true);nwg::modal_error_message(&self.window,"Bewerking niet voltooid",&format!("{e:#}"));self.modal.set(false);}
     fn confirm(&self,text:&str)->bool{self.modal.set(true);let result=nwg::modal_message(&self.window,&nwg::MessageParams{title:"LicentieKluis",content:text,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning});self.modal.set(false);result==nwg::MessageChoice::Yes}
@@ -88,6 +136,7 @@ impl App {
     }
     fn discard(&self)->bool{!self.dirty.get()||self.confirm("Niet-opgeslagen licentie-invoer verwerpen?")}
     fn action(&self,i:usize)->Result<()> {
+        if i==19{self.settings_window.set_visible(true);self.settings_window.set_focus();return Ok(());}
         if i==UNLOCK{return self.unlock();}
         ensure!(self.state.borrow().is_some(),"Ontgrendel eerst de kluis");
         match i {

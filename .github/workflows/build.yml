@@ -2,7 +2,7 @@ name: Build and test LicentieKluis
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'ui/visual-refresh']
 jobs:
   native-windows:
     runs-on: windows-latest
