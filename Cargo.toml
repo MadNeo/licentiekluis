@@ -1,11 +1,12 @@
 [package]
 name = "licentiekluis-native"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 description = "Native Windows license vault with offline encrypted storage"
 
 [dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
 anyhow = "1.0"
 aes-gcm = "0.10.3"
 pbkdf2 = "0.12.2"

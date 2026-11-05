@@ -67,7 +67,7 @@ unsafe fn snapshot(hwnd: HWND, path: &std::path::Path) {
 fn native_windows_show_text_and_unobstructed_controls() {
     nwg::init().unwrap();
     let temp = tempfile::tempdir().unwrap();
-    let app = App::build(temp.path().join("never-created.lkv")).unwrap();
+    let app = App::build(temp.path().join("vault.db")).unwrap();
     app.status.set_text("Vergrendeld · Je gegevens blijven lokaal versleuteld.");
     let screenshots = PathBuf::from("target/ui-check");
     std::fs::create_dir_all(&screenshots).unwrap();

@@ -2,7 +2,7 @@ use anyhow::{ensure,Context,Result};
 use native_windows_gui as nwg;
 #[path = "ui_render.rs"] mod render;
 #[cfg(test)] #[path = "ui_tests.rs"] mod tests;
-use licentiekluis_native::{model::{Entry,Installation,LocalState},vault,sync::{self,Session},mail};
+use licentiekluis_native::{model::{Entry,Installation,LocalState},vault,database,sync::{self,Session},mail};
 use std::{cell::{Cell,RefCell},path::PathBuf,rc::Rc,sync::{Arc,Mutex},time::{Duration,Instant}};
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -10,9 +10,10 @@ use zeroize::Zeroizing;
 const PW:usize=0;const REPEAT:usize=1;const SEARCH:usize=2;const PERSON:usize=3;const NAME:usize=4;const CODE:usize=5;const VERSION:usize=6;const EXPIRY:usize=7;const DEVICE:usize=8;const URL:usize=9;const USER:usize=10;const SERVERPW:usize=11;const BACKUPPW:usize=12;
 const MAIL:usize=18;
 const UNLOCK:usize=0;const NEW:usize=1;const SAVE:usize=2;const DELETE:usize=3;const COPY:usize=4;const SHOW:usize=5;const ADDPERSON:usize=6;const RENAME:usize=7;const DELPERSON:usize=8;const ADDINSTALL:usize=9;const DELINSTALL:usize=10;const LOGIN:usize=11;const SYNC:usize=12;const LOGOUT:usize=13;const CONFLICT:usize=14;const BACKUP:usize=15;const RESTORE:usize=16;const LOCK:usize=17;
-type WorkResult=std::result::Result<(LocalState,Session),String>;
+type WorkResult=(u64,LocalState,std::result::Result<(LocalState,Session),String>);
 
 struct App {
+    sync_busy:Cell<bool>,epoch:Cell<u64>,connection:RefCell<Option<database::Credentials>>,
     paint_handlers:Vec<nwg::RawEventHandler>,settings_window:nwg::Window,_fonts:Vec<nwg::Font>,
     mail_window:nwg::Window,mail_licenses:nwg::ListBox<String>,mail_to:nwg::TextInput,mail_subject:nwg::TextInput,mail_preview:nwg::TextBox,mail_buttons:Vec<nwg::Button>,mail_entries:RefCell<Vec<Entry>>,mail_draft:RefCell<Option<mail::Draft>>,mail_result:Arc<Mutex<Option<std::result::Result<mail::Outcome,String>>>>,
     window:nwg::Window, labels:Vec<nwg::Label>, fields:Vec<nwg::TextInput>, buttons:Vec<nwg::Button>,
@@ -28,7 +29,7 @@ pub fn run()->Result<()> {
     let dir=PathBuf::from(std::env::var_os("LOCALAPPDATA").context("LOCALAPPDATA ontbreekt")?).join("LicentieKluisRust");std::fs::create_dir_all(&dir)?;
     let lock=std::fs::OpenOptions::new().create(true).truncate(false).read(true).write(true).open(dir.join("instance.lock"))?;
     fs2::FileExt::try_lock_exclusive(&lock).context("LicentieKluis Rust is al geopend")?;
-    let app=Rc::new(App::build(dir.join("vault.lkv"))?);let weak=Rc::downgrade(&app);
+    let app=Rc::new(App::build(dir.join("vault.db"))?);let weak=Rc::downgrade(&app);
     let handler=nwg::full_bind_event_handler(&app.window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){app.event(event,handle);}});
     app.status.set_text("Vergrendeld. Nieuwe kluis: kies minimaal 14 tekens en herhaal het wachtwoord.");
     let weak=Rc::downgrade(&app);let mail_handler=nwg::full_bind_event_handler(&app.mail_window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){app.mail_event(event,handle);}});
@@ -44,7 +45,7 @@ impl App {
         let mut small=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(13).build(&mut small)?;
         let mut strong=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(15).weight(600).build(&mut strong)?;
         let mut mono=nwg::Font::default();nwg::Font::builder().family("Consolas").size(15).build(&mut mono)?;
-        let mut window=nwg::Window::default();nwg::Window::builder().size((1180,780)).position((30,20)).title("LicentieKluis 0.4.1").flags(nwg::WindowFlags::WINDOW|nwg::WindowFlags::VISIBLE|nwg::WindowFlags::MINIMIZE_BOX).build(&mut window)?;
+        let mut window=nwg::Window::default();nwg::Window::builder().size((1180,780)).position((30,20)).title("LicentieKluis 0.5.0").flags(nwg::WindowFlags::WINDOW|nwg::WindowFlags::VISIBLE|nwg::WindowFlags::MINIMIZE_BOX).build(&mut window)?;
         let mut settings_window=nwg::Window::default();nwg::Window::builder().size((720,520)).position((180,90)).title("Verbinding & back-up · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut settings_window)?;
         let mut mail_window=nwg::Window::default();nwg::Window::builder().size((920,680)).position((100,50)).title("Licenties delen · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut mail_window)?;
         let mut labels=vec![];
@@ -79,7 +80,7 @@ impl App {
         label(&window,"",20,738,4,26,teal,&small)?;
         label(&settings_window,"",0,0,720,520,bg,&small)?;
         label(&settings_window,"Verbinding & back-up",24,18,664,36,bg,&title)?;
-        label(&settings_window,"Synchroniseer wanneer je wilt. Je lokale kluis blijft beschikbaar.",24,59,664,24,bg,&small)?;
+        label(&settings_window,"Automatische sync elke 30 seconden. Zonder server werk je lokaal.",24,59,664,24,bg,&small)?;
         label(&settings_window,"",20,98,680,228,white,&small)?;
         label(&settings_window,"Serververbinding",36,112,640,26,white,&heading)?;
         for (text,x,y,w) in [("HTTPS-serveradres",36,149,648),("Serveraccount",36,215,252),("Serverwachtwoord",304,215,236)] {label(&settings_window,text,x,y,w,22,white,&small)?;}
@@ -124,12 +125,12 @@ impl App {
             paint_handlers.push(render::bind(parent,panels,design)?);
             parent.invalidate();
         }
-        Ok(Self{paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
+        Ok(Self{sync_busy:Cell::new(false),epoch:Cell::new(0),connection:RefCell::new(None),paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
     }
     fn error(&self,e:anyhow::Error){self.modal.set(true);nwg::modal_error_message(&self.window,"Bewerking niet voltooid",&format!("{e:#}"));self.modal.set(false);}
     fn confirm(&self,text:&str)->bool{self.modal.set(true);let result=nwg::modal_message(&self.window,&nwg::MessageParams{title:"LicentieKluis",content:text,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning});self.modal.set(false);result==nwg::MessageChoice::Yes}
     fn snapshot(&self)->Result<LocalState>{self.state.borrow().clone().context("Ontgrendel eerst de kluis")}
-    fn commit(&self,next:LocalState)->Result<()>{let p=self.password.borrow();vault::save(&self.path,&next,p.as_ref().context("Kluis vergrendeld")?)?;drop(p);*self.state.borrow_mut()=Some(next);self.refresh();Ok(())}
+    fn commit(&self,next:LocalState)->Result<()>{let p=self.password.borrow();database::save(&self.path,&next,p.as_ref().context("Kluis vergrendeld")?)?;drop(p);*self.state.borrow_mut()=Some(next);self.refresh();Ok(())}
     fn event(&self,event:nwg::Event,handle:nwg::ControlHandle){
         if event==nwg::Event::OnNotice && handle==self.notice.handle {if self.mail_result.lock().map(|s|s.is_some()).unwrap_or(false){self.finish_mail();}else{self.finish_work();}return;}
         if event==nwg::Event::OnTimerTick && handle==self.timer.handle {self.tick();return;}
@@ -159,15 +160,21 @@ impl App {
             ADDINSTALL=>{let p=self.platform.selection_string().context("Kies een platform")?;self.draft_installs.borrow_mut().push(Installation{platform:p,device:self.fields[DEVICE].text()});self.render_installs();self.dirty.set(true);},
             DELINSTALL=>{if let Some(index)=self.installations.selection(){self.draft_installs.borrow_mut().remove(index);self.render_installs();self.dirty.set(true);}},
             LOGIN=>self.begin_work(true)?,SYNC=>self.begin_work(false)?,
-            LOGOUT=>{if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.status.set_text("Afgemeld. Lokaal werken blijft beschikbaar.");},
+            LOGOUT=>{database::forget(&self.path)?;*self.connection.borrow_mut()=None;self.epoch.set(self.epoch.get()+1);if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.status.set_text("Afgemeld. Lokaal werken blijft beschikbaar.");},
             CONFLICT=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.resolve()?;},BACKUP=>self.backup(false)?,RESTORE=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.backup(true)?;},
-            LOCK=>{if self.discard(){self.clear_clipboard();self.fields[CODE].set_text("");self.fields[SERVERPW].set_text("");*self.state.borrow_mut()=None;*self.password.borrow_mut()=None;if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.fill(None);self.people.clear();self.licenses.clear();self.owner.set_collection(vec![]);self.fields[PERSON].set_text("");self.status.set_text("Vergrendeld");}},_=>{}
+            LOCK=>{if self.discard(){self.epoch.set(self.epoch.get()+1);*self.connection.borrow_mut()=None;self.clear_clipboard();self.fields[CODE].set_text("");self.fields[SERVERPW].set_text("");*self.state.borrow_mut()=None;*self.password.borrow_mut()=None;if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.fill(None);self.people.clear();self.licenses.clear();self.owner.set_collection(vec![]);self.fields[PERSON].set_text("");self.status.set_text("Vergrendeld");}},_=>{}
         }Ok(())
     }
     fn unlock(&self)->Result<()> {
         ensure!(self.state.borrow().is_none(),"De kluis is al geopend");let password=Zeroizing::new(self.fields[PW].text());
-        let state=if self.path.exists(){vault::load(&self.path,&password)?}else{ensure!(password.chars().count()>=14 && *password==self.fields[REPEAT].text(),"Kies minimaal 14 tekens en herhaal hetzelfde wachtwoord");let s=LocalState::default();vault::save(&self.path,&s,&password)?;s};
-        self.fields[PW].set_text("");self.fields[REPEAT].set_text("");self.fields[URL].set_text(&state.server_url);*self.password.borrow_mut()=Some(password);*self.state.borrow_mut()=Some(state);self.refresh();Ok(())
+        database::migrate(&self.path,&self.path.with_extension("lkv"),&password)?;
+        let state=if database::exists(&self.path)?{database::load(&self.path,&password)?}else{ensure!(password.chars().count()>=14 && *password==self.fields[REPEAT].text(),"Kies minimaal 14 tekens en herhaal hetzelfde wachtwoord");let s=LocalState::default();database::save(&self.path,&s,&password)?;s};
+        self.fields[PW].set_text("");self.fields[REPEAT].set_text("");self.fields[URL].set_text(&state.server_url);
+        let config=database::credentials(&self.path,&password)?;
+        if let Some(c)=&config{self.fields[URL].set_text(&c.url);self.fields[USER].set_text(&c.user);}
+        *self.connection.borrow_mut()=config;*self.password.borrow_mut()=Some(password);*self.state.borrow_mut()=Some(state);self.refresh();
+        self.last_sync.set(Instant::now()-Duration::from_secs(31));
+        self.status.set_text("Lokale database geopend. Automatische synchronisatie zodra de server bereikbaar is.");Ok(())
     }
     fn refresh(&self){
         self.loading.set(true);if let Some(s)=self.state.borrow().as_ref(){let mut people:Vec<_>=s.entries.iter().filter(|e|e.kind=="person"&&!e.deleted).collect();people.sort_by_key(|p|p.name.to_lowercase());*self.people_ids.borrow_mut()=people.iter().map(|e|e.id).collect();let names:Vec<String>=people.iter().map(|p|p.name.clone()).collect();let mut list=vec!["Alle gebruikers".into()];list.extend(names.clone());let selected=self.people.selection();self.people.set_collection(list);self.people.set_selection(selected.or(Some(0)));self.owner.set_collection(names);self.status.set_text(&format!("{} wijzigingen · {} conflicten · Laatste sync: {}",s.pending.len(),s.conflicts.len(),s.last_sync.map(|d|d.format("%d-%m-%Y %H:%M").to_string()).unwrap_or_else(||"nog niet".into())));}
@@ -188,16 +195,49 @@ impl App {
     fn delete_license(&self)->Result<()>{let mut s=self.snapshot()?;let id=self.selected.get().context("Selecteer een licentie")?;if !self.confirm("Deze licentie verwijderen, ook op de server na synchronisatie?"){return Ok(());}let mut e=s.entries.iter().find(|e|e.id==id).context("Record ontbreekt")?.clone();e.deleted=true;s.edit(e)?;self.selected.set(None);self.commit(s)}
     fn edit_person(&self,action:usize)->Result<()>{let mut s=self.snapshot()?;let id=self.people.selection().filter(|i|*i>0).and_then(|i|self.people_ids.borrow().get(i-1).copied());let mut p=if action==ADDPERSON{Entry::new("person","")}else{s.entries.iter().find(|e|Some(e.id)==id).context("Selecteer eerst een gebruiker")?.clone()};if action==DELPERSON{ensure!(!s.entries.iter().any(|e|e.kind=="license"&&!e.deleted&&e.owner_id==Some(p.id)),"Verplaats of verwijder eerst de licenties van deze gebruiker");if !self.confirm("Gebruiker verwijderen?"){return Ok(());}p.deleted=true;}else{p.name=self.fields[PERSON].text().trim().into();ensure!(!s.entries.iter().any(|e|e.kind=="person"&&!e.deleted&&e.id!=p.id&&e.name.to_lowercase()==p.name.to_lowercase()),"Deze gebruiker bestaat al");}s.edit(p)?;self.commit(s)}
     fn begin_work(&self,login:bool)->Result<()> {
-        ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op voordat je synchroniseert");let state=self.snapshot()?;ensure!(state.conflicts.is_empty(),"Los eerst de conflicten op");
-        if login&&state.vault_id.is_none()&&!self.confirm("Deze kluis koppelen? Alle lokale gebruikers en licenties worden naar deze server verzonden. Het beheeraccount kan de hele kluis zien."){return Ok(());}
-        let current=self.session.borrow().clone();if !login{ensure!(current.is_some(),"Meld eerst aan");}
-        let url=self.fields[URL].text().trim().trim_end_matches('/').to_string()+"/";let user=self.fields[USER].text();let password=Zeroizing::new(self.fields[SERVERPW].text());self.fields[SERVERPW].set_text("");
-        let result=self.result.clone();let sender=self.notice.sender();self.busy.set(true);self.window.set_enabled(false);self.status.set_text("Verbinding maken en synchroniseren…");
-        std::thread::spawn(move||{let work=(||->Result<(LocalState,Session)>{let session=if login{sync::login(&url,&user,&password)?}else{current.context("Geen sessie")?};let mut next=state;sync::synchronize(&mut next,&session)?;Ok((next,session))})();if let Ok(mut slot)=result.lock(){*slot=Some(work.map_err(|e|format!("{e:#}")));}sender.notice();});Ok(())
+        ensure!(!self.sync_busy.get(),"Synchronisatie is al bezig");
+        let state=self.snapshot()?;ensure!(state.conflicts.is_empty(),"Los eerst de conflicten op");
+        if login&&state.vault_id.is_none()&&!self.confirm("Deze kluis koppelen en automatisch synchroniseren? Alle lokale gebruikers en licenties worden naar deze server verzonden. De serveraanmelding wordt versleuteld in je lokale database bewaard."){return Ok(());}
+        if login {
+            let config=database::Credentials{url:self.fields[URL].text().trim().trim_end_matches('/').to_string()+"/",user:self.fields[USER].text(),password:self.fields[SERVERPW].text()};
+            ensure!(!config.user.trim().is_empty()&&!config.password.is_empty(),"Vul serveraccount en serverwachtwoord in");
+            database::remember(&self.path,&config,self.password.borrow().as_ref().context("Vergrendeld")?)?;
+            *self.connection.borrow_mut()=Some(config);*self.session.borrow_mut()=None;self.fields[SERVERPW].set_text("");
+        }
+        let credentials=self.connection.borrow().clone().context("Stel eerst de serververbinding in")?;
+        let current=self.session.borrow().clone();let epoch=self.epoch.get();
+        let result=self.result.clone();let sender=self.notice.sender();self.sync_busy.set(true);
+        self.last_sync.set(Instant::now());self.status.set_text("Synchroniseren op de achtergrond. Je kunt lokaal doorwerken.");
+        std::thread::spawn(move||{
+            let work=(||->Result<(LocalState,Session)>{
+                let session=match current {Some(s)=>s,None=>sync::login(&credentials.url,&credentials.user,&credentials.password)?};
+                let mut next=state.clone();sync::synchronize(&mut next,&session)?;Ok((next,session))
+            })();
+            if let Ok(mut slot)=result.lock(){*slot=Some((epoch,state,work.map_err(|e|format!("{e:#}"))));}sender.notice();
+        });Ok(())
     }
-    fn finish_work(&self){self.window.set_enabled(true);self.busy.set(false);self.last_sync.set(Instant::now());let result=self.result.lock().ok().and_then(|mut s|s.take());if let Some(result)=result {match result {Ok((s,session))=>{match self.commit(s){Ok(())=>{*self.session.borrow_mut()=Some(session);},Err(e)=>self.error(e)}},Err(e)=>{*self.session.borrow_mut()=None;self.status.set_text("Sync mislukt; lokaal opgeslagen wijzigingen blijven behouden. Meld opnieuw aan.");self.error(anyhow::anyhow!(e));}}}}
+    fn finish_work(&self){
+        self.sync_busy.set(false);self.last_sync.set(Instant::now());
+        let result=self.result.lock().ok().and_then(|mut s|s.take());
+        if let Some((epoch,sent,result))=result {
+            if epoch!=self.epoch.get()||self.state.borrow().is_none(){return;}
+            match result {
+                Ok((next,session))=>{
+                    let applied=(||->Result<()>{
+                        let merged=licentiekluis_native::model::reconcile(&sent,&self.snapshot()?,next)?;
+                        database::save(&self.path,&merged,self.password.borrow().as_ref().context("Vergrendeld")?)?;
+                        *self.state.borrow_mut()=Some(merged);*self.session.borrow_mut()=Some(session);
+                        if !self.dirty.get()&&!self.modal.get(){self.refresh();}
+                        Ok(())
+                    })();
+                    if let Err(e)=applied{self.status.set_text(&format!("Lokale opslag niet bijgewerkt: {e}. Opnieuw proberen over 30 seconden."));}
+                },
+                Err(e)=>{*self.session.borrow_mut()=None;self.status.set_text(&format!("Lokaal werken; sync niet gelukt: {e}. Nieuwe poging over 30 seconden."));}
+            }
+        }
+    }
     fn resolve(&self)->Result<()>{let mut s=self.snapshot()?;let ids:Vec<_>=s.conflicts.keys().copied().collect();if ids.is_empty(){self.status.set_text("Geen conflicten");return Ok(());}for id in ids{let local=s.entries.iter().find(|e|e.id==id).context("Record ontbreekt")?;let remote=&s.conflicts[&id];let describe=|e:&Entry|format!("{}\nVersie: {}\nVerwijderd: {}\nInstallaties: {}\nOpmerkingen: {}",e.name,e.software_version,e.deleted,e.installations.iter().map(|i|format!("{} / {}",i.platform,i.device)).collect::<Vec<_>>().join(", "),e.notes);let text=format!("LOKAAL\n{}\n\nSERVER\n{}\n\nCode verschilt: {}\n\nJa: lokale versie behouden\nNee: serverversie overnemen\nAnnuleren: later beslissen",describe(local),describe(remote),local.code!=remote.code);self.modal.set(true);let answer=nwg::modal_message(&self.window,&nwg::MessageParams{title:"Synchronisatieconflict",content:&text,buttons:nwg::MessageButtons::YesNoCancel,icons:nwg::MessageIcons::Warning});self.modal.set(false);if answer==nwg::MessageChoice::Cancel{break;}s.resolve(id,answer==nwg::MessageChoice::Yes)?;}self.commit(s)}
-    fn backup(&self,restore:bool)->Result<()>{let mut dialog=nwg::FileDialog::default();nwg::FileDialog::builder().title(if restore{"Back-up herstellen (ook .NET 0.1)"}else{"Versleutelde back-up opslaan"}).action(if restore{nwg::FileDialogAction::Open}else{nwg::FileDialogAction::Save}).filters("Kluis(*.lkv)").build(&mut dialog)?;self.modal.set(true);let accepted=dialog.run(Some(&self.window));self.modal.set(false);if !accepted{return Ok(());}let path=PathBuf::from(dialog.get_selected_item()?);ensure!(path!=self.path,"Kies een andere locatie dan de actieve kluis");if restore{let password=Zeroizing::new(self.fields[BACKUPPW].text());self.fields[BACKUPPW].set_text("");let s=vault::load(&path,&password)?;if !self.confirm("De huidige lokale kluis vervangen? Er wordt eerst een herstelkopie gemaakt. Gebruik daarna alleen deze client voor nieuwe wijzigingen."){return Ok(());}let before=self.path.with_file_name(format!("before-restore-{}.lkv",chrono::Local::now().format("%Y%m%d-%H%M%S")));vault::save(&before,&self.snapshot()?,self.password.borrow().as_ref().context("Vergrendeld")?)?;*self.session.borrow_mut()=None;self.fields[URL].set_text(&s.server_url);self.commit(s)?;}else{vault::save(&path,&self.snapshot()?,self.password.borrow().as_ref().context("Vergrendeld")?)?;self.status.set_text("Back-up opgeslagen; bewaar het lokale kluiswachtwoord voor herstel.");}Ok(())}
+    fn backup(&self,restore:bool)->Result<()>{let mut dialog=nwg::FileDialog::default();nwg::FileDialog::builder().title(if restore{"Back-up herstellen (ook .NET 0.1)"}else{"Versleutelde back-up opslaan"}).action(if restore{nwg::FileDialogAction::Open}else{nwg::FileDialogAction::Save}).filters("Kluis(*.lkv)").build(&mut dialog)?;self.modal.set(true);let accepted=dialog.run(Some(&self.window));self.modal.set(false);if !accepted{return Ok(());}let path=PathBuf::from(dialog.get_selected_item()?);ensure!(path!=self.path,"Kies een andere locatie dan de actieve kluis");if restore{let password=Zeroizing::new(self.fields[BACKUPPW].text());self.fields[BACKUPPW].set_text("");let s=vault::load(&path,&password)?;if !self.confirm("De huidige lokale kluis vervangen? Er wordt eerst een herstelkopie gemaakt. Gebruik daarna alleen deze client voor nieuwe wijzigingen."){return Ok(());}let before=self.path.with_file_name(format!("before-restore-{}.lkv",chrono::Local::now().format("%Y%m%d-%H%M%S")));vault::save(&before,&self.snapshot()?,self.password.borrow().as_ref().context("Vergrendeld")?)?;*self.session.borrow_mut()=None;self.fields[URL].set_text(&s.server_url);self.commit(s)?;database::forget(&self.path)?;*self.connection.borrow_mut()=None;self.epoch.set(self.epoch.get()+1);}else{vault::save(&path,&self.snapshot()?,self.password.borrow().as_ref().context("Vergrendeld")?)?;self.status.set_text("Back-up opgeslagen; bewaar het lokale kluiswachtwoord voor herstel.");}Ok(())}
     fn open_mail(&self)->Result<()> {
         ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");let s=self.snapshot()?;
         let owner=self.people.selection().filter(|i|*i>0).and_then(|i|self.people_ids.borrow().get(i-1).copied());
@@ -228,7 +268,7 @@ impl App {
         match result{Some(Ok(outcome))=>{*self.mail_draft.borrow_mut()=None;self.mail_preview.set_text(&outcome.message);nwg::modal_info_message(&self.mail_window,"Mailstatus",&outcome.message);},Some(Err(error))=>{nwg::modal_error_message(&self.mail_window,"Verzending niet bevestigd",&format!("{}\nControleer eerst de ontvangst. Bij opnieuw klikken blijft hetzelfde verzoeknummer behouden om dubbele verzending te voorkomen.",error));},None=>{}}
     }
     fn clear_clipboard(&self){if let Some((value,_))=self.copied.borrow_mut().take(){if clipboard_win::get_clipboard_string().ok().as_deref()==Some(value.as_str()){let _=clipboard_win::set_clipboard_string("");}}}
-    fn tick(&self){let expire=self.copied.borrow().as_ref().is_some_and(|(_,t)|t.elapsed()>Duration::from_secs(30));if expire{self.clear_clipboard();}if self.revealed.get().is_some_and(|t|t.elapsed()>Duration::from_secs(30)){self.fields[CODE].set_password_char(Some('*'));self.revealed.set(None);}if !self.busy.get()&&!self.dirty.get()&&!self.modal.get()&&self.session.borrow().is_some()&&self.last_sync.get().elapsed()>Duration::from_secs(60){self.last_sync.set(Instant::now());if let Err(e)=self.begin_work(false){self.status.set_text(&e.to_string());}}}
+    fn tick(&self){let expire=self.copied.borrow().as_ref().is_some_and(|(_,t)|t.elapsed()>Duration::from_secs(30));if expire{self.clear_clipboard();}if self.revealed.get().is_some_and(|t|t.elapsed()>Duration::from_secs(30)){self.fields[CODE].set_password_char(Some('*'));self.revealed.set(None);}if !self.busy.get()&&!self.sync_busy.get()&&!self.modal.get()&&self.state.borrow().is_some()&&self.connection.borrow().is_some()&&self.last_sync.get().elapsed()>Duration::from_secs(30){self.last_sync.set(Instant::now());if let Err(e)=self.begin_work(false){self.status.set_text(&e.to_string());}}}
 }
 
 impl Drop for App {
