@@ -11,13 +11,16 @@ const server=http.createServer(async(req,res)=>{
  if(req.url.endsWith('/code'))return json({code:records.get(req.url.split('/')[3]).code});
  return json({},404);
  }
- const file=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js','vault.js','manage.js','mail.js','app.css'].includes(file)){res.writeHead(404);res.end();return;}
+ const file=req.url==='/'?'index.html':req.url==='/changelog'?'changelog.html':req.url.slice(1);if(file==='changelog.txt'){res.setHeader('Content-Type','text/plain');res.end(fs.readFileSync(path.join(root,'../../..','CHANGELOG.md')));return;}if(!['index.html','app.js','vault.js','manage.js','mail.js','app.css','theme.js','changelog.js','changelog.html'].includes(file)){res.writeHead(404);res.end();return;}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");res.end(fs.readFileSync(path.join(root,file)));
 });
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  try{const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
  const url=`http://127.0.0.1:${server.address().port}`;await page.goto(url);
+ await page.click('#themeToggle');assert.equal(await page.getAttribute('html','data-theme'),'dark');await page.reload();assert.equal(await page.getAttribute('html','data-theme'),'dark');
+ await page.getByRole('link',{name:'Changelog',exact:true}).click();await page.waitForFunction(()=>document.getElementById('changelogContent').textContent.includes('0.7.0'));assert.equal(await page.getAttribute('html','data-theme'),'dark');await page.getByRole('link',{name:'Terug naar de kluis'}).click();
+ await page.locator('#themeToggle').focus();await page.keyboard.press('Space');assert.equal(await page.getAttribute('html','data-theme'),'light');await page.click('#themeToggle');
  const login=async()=>{await page.fill('#username','test');await page.fill('#password','synthetic-test-password');await page.click('#submit');await page.waitForFunction(()=>document.querySelector('#dashboard').hidden===false);};
  const settled=()=>page.waitForFunction(()=>typeof vault!=='undefined'&&vault&&!syncWork&&vault.pending.size===0);
  await login();await settled();
@@ -39,7 +42,7 @@ const server=http.createServer(async(req,res)=>{
  // Deleting an owner retains the license and historical ownership.
  await page.click('#managePeople');await page.locator('#peopleList').getByRole('button',{name:'Verwijderen'}).click();await settled();await page.click('#peopleClose');assert.equal(records.get(person.id).deleted,true);assert.equal(records.get(license.id).deleted,false);assert.match(await page.textContent('#licenses'),/Verwijderde gebruiker/);
  // Responsive layout and lock removes sensitive forms.
- await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/licentiekluis-web-mobile.png',fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.setViewportSize({width:1280,height:900});await page.screenshot({path:'/tmp/licentiekluis-web-desktop.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/licentiekluis-web-mobile.png',fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.setViewportSize({width:1280,height:900});await page.screenshot({path:'/tmp/licentiekluis-web-dark.png',fullPage:true});await page.click('#themeToggle');await page.screenshot({path:'/tmp/licentiekluis-web-desktop.png',fullPage:true});await page.click('#themeToggle');
  await page.locator('.license').getByRole('button',{name:'Bewerken',exact:true}).click();await page.screenshot({path:'/tmp/licentiekluis-web-editor.png',fullPage:true});await page.evaluate(()=>localLock());assert.equal(await page.inputValue('#licenseCode'),'');assert.equal(await page.locator('dialog[open]').count(),0);assert.deepEqual(errors,[]);
  console.log(`PASS: Chromium CRUD, concurrent Windows edit/conflict, mail preview, encrypted backup/restore, outage/relogin recovery, owner deletion, mobile layout and lock (${requests} sync calls)`);
  }finally{await browser.close();server.close();}

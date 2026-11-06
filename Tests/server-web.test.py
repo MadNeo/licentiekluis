@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory() as temp:
     def login(): return json.loads(request('/api/login',{'username':'test','password':password},False))
     proc = start()
     try:
-        for name in ['/', '/app.js', '/mail.js', '/manage.js', '/vault.js', '/app.css']:
+        for name in ['/', '/app.js', '/mail.js', '/manage.js', '/vault.js', '/app.css', '/theme.js', '/changelog', '/changelog.txt', '/changelog.js']:
             assert request(name,auth=False), name
         try: request('/api/sync',{'vaultId':str(uuid.uuid4()),'changes':[]},False); raise AssertionError('Unauthenticated access')
         except urllib.error.HTTPError as e: assert e.code == 401

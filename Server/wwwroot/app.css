@@ -4,3 +4,22 @@
 
 
 .toolbar{margin:0 0 12px}.toolbar .primary,.actions .primary{width:auto}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.wide{grid-column:1/-1}textarea{font:inherit;color:inherit;width:100%;padding:12px;border:1px solid #bfced6;border-radius:8px;resize:vertical;margin-top:7px;background:#fff}.form-grid input,.form-grid select{margin-bottom:0}.installation-row,.person-row{display:flex;align-items:center;gap:8px;margin:12px 0}.installation-row select{width:140px}.installation-row input,.person-row input{flex:1;min-width:0}.installation-row input,.installation-row select,.person-row input{margin:0}.person-row label{flex:1}.error,.pending{color:#9a3c10}.conflict-columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}.conflict-columns pre{font-size:12px;max-height:260px}.license h3{overflow-wrap:anywhere}#syncStatus{font-size:13px;min-height:22px}dialog h2{font-size:24px}dialog h3{font-size:18px;margin:8px 0}.mailBar{margin-top:24px}#licenses{margin-top:24px}@media(max-width:600px){.form-grid,.conflict-columns{grid-template-columns:1fr}.installation-row,.person-row{flex-wrap:wrap}.installation-row select{width:100%}.toolbar button{flex:1}.wide{grid-column:auto}dialog{width:96%;padding:16px}}
+
+.header-actions{margin-left:auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}.header-actions button{margin-left:0}.header-actions a{color:inherit;text-underline-offset:4px}.mark{flex-shrink:0}dialog{color:inherit;background:#fff}.changelog{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
+:root[data-theme="dark"]{color-scheme:dark;color:#e8eff7;background:#101822}
+[data-theme="dark"] header,[data-theme="dark"] .card,[data-theme="dark"] .license,[data-theme="dark"] dialog{background:#1b2735;border-color:#43576b;color:#e8eff7}
+[data-theme="dark"] p,[data-theme="dark"] header p,[data-theme="dark"] .license .owner{color:#bdcddd}
+[data-theme="dark"] .muted,[data-theme="dark"] footer,[data-theme="dark"] .empty{color:#a9bdcf}
+[data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea{color:#e8eff7;background:#101c29;border-color:#61778b}
+[data-theme="dark"] input::placeholder,[data-theme="dark"] textarea::placeholder{color:#9bafc2;opacity:1}
+[data-theme="dark"] button{background:#24384a;color:#e8eff7;border-color:#61778b}
+[data-theme="dark"] button:hover{background:#305268}
+[data-theme="dark"] .primary{background:#126f68;color:#fff;border-color:#4dbbad}
+[data-theme="dark"] .primary:hover{background:#18867c}
+[data-theme="dark"] .eyebrow{color:#6cd9cb}
+[data-theme="dark"] .badge{background:#173e3c;color:#93e6d9}
+[data-theme="dark"] .install{border-color:#43576b}
+[data-theme="dark"] .expired,[data-theme="dark"] #message,[data-theme="dark"] .error,[data-theme="dark"] .pending{color:#ffbd9e}
+[data-theme="dark"] dialog pre{background:#101c29;color:#e8eff7}
+[data-theme="dark"] dialog::backdrop{background:#000a}
+@media(max-width:720px){header{flex-wrap:wrap}.header-actions{flex-basis:100%;justify-content:flex-end}.header-actions button{font-size:14px}}

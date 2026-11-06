@@ -102,3 +102,44 @@ pub struct SyncResponse {pub entries:Vec<Entry>,pub applied:Vec<Uuid>,pub confli
     #[test] fn server_identity_cannot_change(){let mut s=LocalState::default();s.bind("https://a/".into(),Uuid::new_v4()).unwrap();assert!(s.bind("https://b/".into(),Uuid::new_v4()).is_err());}
     #[test] fn invalid_platform_rejected(){let mut p=Entry::new("license","A");p.owner_id=Some(Uuid::new_v4());p.installations.push(Installation{platform:"bad".into(),device:"PC".into()});assert!(p.validate().is_err());}
 }
+
+/// Keep edits made while the network request was in flight. If the server
+/// accepted the sent version, base the next mutation on that accepted revision.
+/// Otherwise preserve the existing base revision and conflict.
+pub fn reconcile(sent:&LocalState,current:&LocalState,mut received:LocalState)->Result<LocalState> {
+    for local in &current.entries {
+        let previous=sent.entries.iter().find(|e|e.id==local.id);
+        if previous.is_some_and(|e|e.mutation_id==local.mutation_id){continue;}
+        let mut entry=local.clone();
+        let base=if received.conflicts.contains_key(&local.id) {
+            *current.pending.get(&local.id).unwrap_or(&local.revision)
+        } else {
+            received.entries.iter().find(|e|e.id==local.id).map_or(local.revision,|e|e.revision)
+        };
+        entry.revision=base;
+        received.entries.retain(|e|e.id!=local.id);received.entries.push(entry);
+        received.pending.insert(local.id,base);
+    }
+    received.validate()?;Ok(received)
+}
+#[cfg(test)] mod background_tests {
+ use super::*;
+ #[test] fn edits_during_sync_survive_and_use_accepted_revision() {
+    let mut sent=LocalState::default();let p=Entry::new("person","Sent");sent.edit(p.clone()).unwrap();
+    let mut current=sent.clone();let mut edited=current.entries[0].clone();edited.name="New offline edit".into();current.edit(edited).unwrap();
+    let mut received=sent.clone();let mut remote=sent.entries[0].clone();remote.revision=7;
+    received.merge(SyncResponse{entries:vec![remote],applied:vec![p.id],conflicts:vec![]}).unwrap();
+    let result=reconcile(&sent,&current,received).unwrap();
+    assert_eq!(result.entries[0].name,"New offline edit");assert_eq!(result.pending[&p.id],7);
+    assert_eq!(result.entries[0].mutation_id,current.entries[0].mutation_id);
+ }
+ #[test] fn concurrent_edit_keeps_server_conflict() {
+    let mut sent=LocalState::default();let p=Entry::new("person","Sent");sent.edit(p.clone()).unwrap();
+    let mut current=sent.clone();let mut edit=current.entries[0].clone();edit.name="Latest local".into();current.edit(edit).unwrap();
+    let mut received=sent.clone();let mut remote=p.clone();remote.name="Other client".into();remote.revision=3;
+    received.merge(SyncResponse{entries:vec![remote],applied:vec![],conflicts:vec![p.id]}).unwrap();
+    let result=reconcile(&sent,&current,received).unwrap();
+    assert_eq!(result.entries[0].name,"Latest local");assert_eq!(result.conflicts[&p.id].name,"Other client");
+ }
+}
+

@@ -1,6 +1,6 @@
 # LicentieKluis
 
-Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Web/server 0.6 met GitHub-installatie en upgradefunctie. De Windowsclient heeft een eigen versienummer.
+Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Web/server en Windows 0.7.0 met GitHub-installatie en upgradefunctie. De Windowsclient heeft een eigen versienummer.
 
 ## Server installeren in Proxmox-LXC
 
@@ -69,3 +69,7 @@ Zie GitHub Actions voor de actuele buildresultaten. Een volledige installatie en
 
 Dit zijn de eerder opgeleverde PDF-handleidingen. Voor de daarna toegevoegde GitHub-installatie en het commando `upgrade` volg je de actuele instructies hierboven.
 
+
+## Weergave en wijzigingen
+
+[Lichte/donkere modus](docs/WEERGAVE.md) · [Changelog van deze versie](CHANGELOG.md). De Windowsclient op main bevat ook de versleutelde lokale SQLite-opslag en automatische synchronisatie uit Windows 0.5.0.
