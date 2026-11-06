@@ -27,7 +27,8 @@ pub unsafe fn draw_item(l:LPARAM,theme:&Theme)->bool {
  let caption=String::from_utf16_lossy(&text[..text.iter().position(|c|*c==0).unwrap_or(text.len())]);
  let primary=item.CtlType==ODT_BUTTON&&["Opslaan","Ontgrendelen","Nieuwe licentie","Aanmelden","Voorbeeld maken"].contains(&caption.as_str());
  let color=if primary{[20,139,125]}else if selected{[228,245,241]}else{[255,255,255]};
- let brush=theme.brush(color);let pen=CreatePen(PS_SOLID,1,if primary{if theme.dark.get(){RGB(21,121,108)}else{RGB(20,110,101)}}else{theme.border()});
+ let backdrop=SendMessageW(GetParent(item.hwndItem),WM_CTLCOLORBTN,dc as usize,item.hwndItem as isize) as HBRUSH;FillRect(dc,&item.rcItem,backdrop);
+ let brush=theme.brush(color);let pen=CreatePen(PS_SOLID as i32,1,if primary{if theme.dark.get(){RGB(21,121,108)}else{RGB(20,110,101)}}else{theme.border()});
  let old_brush=SelectObject(dc,brush as _);let old_pen=SelectObject(dc,pen as _);
  let radius=(12*GetDpiForWindow(item.hwndItem)/96) as i32;
  RoundRect(dc,item.rcItem.left,item.rcItem.top,item.rcItem.right,item.rcItem.bottom,radius,radius);

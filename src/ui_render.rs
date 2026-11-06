@@ -48,7 +48,7 @@ pub fn bind(window: &nwg::Window, panels: Vec<Panel>, design: (i32, i32), theme:
             unsafe {
                 let dc=w as HDC;SetBkMode(dc,TRANSPARENT as i32);winapi::um::wingdi::SetTextColor(dc,theme.ink());winapi::um::wingdi::SetBkColor(dc,theme.background());
                 let mut color=[255,255,255];
-                if msg==WM_CTLCOLORSTATIC && super::theme::class(l as HWND)=="Static" {
+                if (msg==WM_CTLCOLORSTATIC && super::theme::class(l as HWND).eq_ignore_ascii_case("static")) || msg==WM_CTLCOLORBTN {
                     let mut r:RECT=std::mem::zeroed();GetWindowRect(l as HWND,&mut r);let mut point=POINT{x:r.left,y:r.top};ScreenToClient(hwnd,&mut point);
                     let mut client:RECT=std::mem::zeroed();GetClientRect(hwnd,&mut client);
                     let x=point.x*design.0/client.right.max(1);let y=point.y*design.1/client.bottom.max(1);
@@ -73,7 +73,7 @@ pub fn bind(window: &nwg::Window, panels: Vec<Panel>, design: (i32, i32), theme:
                 if !brush.is_null() {
                     if x>0 && width>150 && height>60 {
                         use winapi::um::wingdi::*;
-                        let pen=CreatePen(PS_SOLID,1,theme.border());let old_pen=SelectObject(dc,pen as _);let old_brush=SelectObject(dc,brush as _);
+                        let pen=CreatePen(PS_SOLID as i32,1,theme.border());let old_pen=SelectObject(dc,pen as _);let old_brush=SelectObject(dc,brush as _);
                         RoundRect(dc,rect.left,rect.top,rect.right,rect.bottom,16,16);
                         SelectObject(dc,old_pen);SelectObject(dc,old_brush);DeleteObject(pen as _);
                     } else {FillRect(dc, &rect, brush);}
