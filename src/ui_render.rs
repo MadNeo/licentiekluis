@@ -71,7 +71,12 @@ pub fn bind(window: &nwg::Window, panels: Vec<Panel>, design: (i32, i32), theme:
                 };
                 let brush = theme.brush(rgb);
                 if !brush.is_null() {
-                    FillRect(dc, &rect, brush);
+                    if x>0 && width>150 && height>60 {
+                        use winapi::um::wingdi::*;
+                        let pen=CreatePen(PS_SOLID,1,theme.border());let old_pen=SelectObject(dc,pen as _);let old_brush=SelectObject(dc,brush as _);
+                        RoundRect(dc,rect.left,rect.top,rect.right,rect.bottom,16,16);
+                        SelectObject(dc,old_pen);SelectObject(dc,old_brush);DeleteObject(pen as _);
+                    } else {FillRect(dc, &rect, brush);}
 
                 }
             }
@@ -80,3 +85,26 @@ pub fn bind(window: &nwg::Window, panels: Vec<Panel>, design: (i32, i32), theme:
     })
 }
 
+
+/// NWG's label subclass paints fixed-color non-client strips. Own the whole
+/// label client area so both text and margins follow the active theme.
+pub fn bind_label(label:&nwg::Label, theme:Rc<Theme>)->Result<nwg::RawEventHandler,nwg::NwgError> {
+    let handler=nwg::bind_raw_event_handler(&label.handle,0x4C4B0002,move|hwnd,msg,_,_| {
+        if msg==WM_NCCALCSIZE||msg==WM_NCPAINT{return Some(0);}
+        if msg!=WM_PAINT{return None;}
+        unsafe {
+            use winapi::um::wingdi::*;
+            let mut ps:PAINTSTRUCT=std::mem::zeroed();let dc=BeginPaint(hwnd,&mut ps);
+            let mut rect:RECT=std::mem::zeroed();GetClientRect(hwnd,&mut rect);
+            let brush=SendMessageW(GetParent(hwnd),WM_CTLCOLORSTATIC,dc as usize,hwnd as isize) as winapi::shared::windef::HBRUSH;
+            FillRect(dc,&rect,brush);SetBkMode(dc,TRANSPARENT as i32);SetTextColor(dc,theme.ink());
+            let font=SendMessageW(hwnd,WM_GETFONT,0,0);let old=SelectObject(dc,font as _);
+            let len=GetWindowTextLengthW(hwnd);let mut text=vec![0u16;len as usize+1];GetWindowTextW(hwnd,text.as_mut_ptr(),len+1);
+            DrawTextW(dc,text.as_ptr(),len,&mut rect,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS|DT_NOPREFIX);
+            SelectObject(dc,old);EndPaint(hwnd,&ps);
+        }
+        Some(0)
+    })?;
+    unsafe{SetWindowPos(label.handle.hwnd().unwrap(),std::ptr::null_mut(),0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);}
+    Ok(handler)
+}

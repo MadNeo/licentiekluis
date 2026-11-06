@@ -1,5 +1,15 @@
 # LicentieKluis — wijzigingen
 
+## Windows 0.8.0 — 6 november 2026
+
+- Rustigere panelen, afgeronde actieknoppen en duidelijk herkenbare hoofdacties.
+- Witte stroken rond tekst in donkere modus verholpen; labels volgen het actuele thema.
+- Meer ruimte voor installaties; zoeken doorzoekt nu ook de softwareversie.
+- Onopgeslagen licentie-invoer blijft behouden tijdens zoeken en filteren.
+- Bewerken blijft mogelijk wanneer de toegewezen gebruiker via de server is verwijderd.
+- Een ingevoerd apparaat moet eerst worden toegevoegd voordat de licentie wordt opgeslagen.
+- Back-upwachtwoord wordt gewist bij vergrendelen.
+
 ## Web 0.7.1 — 6 november 2026
 
 - Vernieuwd dashboard met compacte filters, duidelijke licentiekaarten en een eigen deelblok.

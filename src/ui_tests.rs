@@ -92,6 +92,9 @@ fn native_windows_show_text_and_unobstructed_controls() {
         assert!(app.theme.dark.get());assert!(theme::Theme::new(&app.theme_path).dark.get());
         paint_now(&app.settings_window);snapshot(app.settings_window.handle.hwnd().unwrap(),&screenshots.join("04-settings-dark.bmp"),true);
         app.settings_window.set_visible(false);
+        paint_now(&app.window);
+        let title=app.labels[0].handle.hwnd().unwrap();let dc=GetDC(title);
+        assert_eq!(GetPixel(dc,1,1),app.theme.background(),"Label margins must follow dark theme, not retain white strips");ReleaseDC(title,dc);
         paint_now(&app.mail_window);
         for button in &app.mail_buttons { reachable(&button.handle); }
         for handle in [&app.mail_licenses.handle,&app.mail_to.handle,&app.mail_subject.handle,&app.mail_preview.handle] { reachable(handle); }
@@ -105,6 +108,22 @@ fn native_windows_show_text_and_unobstructed_controls() {
         app.set_theme(false).unwrap();paint_now(&app.window);snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("08-main-light.bmp"),false);
         assert!(!theme::Theme::new(&app.theme_path).dark.get());
     }
+    // Draft preservation, version search, deleted-owner edits and device validation.
+    let mut state=LocalState::default();let person=Entry::new("person","Voorbeeldgebruiker");state.edit(person.clone()).unwrap();
+    let mut license=Entry::new("license","Microsoft Office");license.owner_id=Some(person.id);license.code="TEST-CODE-ONLY".into();license.software_version="2026".into();license.installations.push(Installation{platform:"Windows".into(),device:"Laptop kantoor".into()});state.edit(license.clone()).unwrap();
+    *app.state.borrow_mut()=Some(state);*app.password.borrow_mut()=Some(Zeroizing::new("synthetic-test-password".into()));app.refresh();app.fill(Some(license.id));
+    app.fields[SEARCH].set_text("2026");app.render_list();assert!(app.license_ids.borrow().contains(&license.id),"Search must include version");
+    app.fields[NAME].set_text("Mijn onopgeslagen wijziging");app.dirty.set(true);app.fields[SEARCH].set_text("geen overeenkomst");app.render_list();
+    assert_eq!(app.fields[NAME].text(),"Mijn onopgeslagen wijziging");assert_eq!(app.selected.get(),Some(license.id));assert!(app.dirty.get());
+    app.fields[DEVICE].set_text("Nog toevoegen");assert!(app.save_license().is_err(),"Pending device must not be silently dropped");app.action(ADDINSTALL).unwrap();assert!(app.fields[DEVICE].text().is_empty());
+    app.fields[SEARCH].set_text("");app.save_license().unwrap();assert!(!app.dirty.get());assert_eq!(database::load(&app.path,"synthetic-test-password").unwrap().entries.iter().find(|e|e.id==license.id).unwrap().installations.len(),2);
+    app.state.borrow_mut().as_mut().unwrap().entries.iter_mut().find(|e|e.id==person.id).unwrap().deleted=true;
+    app.refresh();app.fill(Some(license.id));assert_eq!(app.owner.selection(),None);app.fields[VERSION].set_text("2027");app.save_license().unwrap();
+    assert_eq!(app.snapshot().unwrap().entries.iter().find(|e|e.id==license.id).unwrap().owner_id,Some(person.id));
+    app.state.borrow_mut().as_mut().unwrap().entries.iter_mut().find(|e|e.id==person.id).unwrap().deleted=false;app.refresh();app.fill(Some(license.id));
+    unsafe{paint_now(&app.window);snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("09-filled-light.bmp"),false);}
+    app.set_theme(true).unwrap();unsafe{paint_now(&app.window);snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("10-filled-dark.bmp"),true);}
+    app.fields[BACKUPPW].set_text("temporary-backup-password");app.action(LOCK).unwrap();assert!(app.fields[BACKUPPW].text().is_empty());assert!(app.fields[CODE].text().is_empty());
     assert!(!temp.path().join("never-created.lkv").exists());
 }
 
