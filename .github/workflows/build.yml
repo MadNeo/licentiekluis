@@ -48,6 +48,7 @@ jobs:
           path: /tmp/licentiekluis-web-*.png
       - run: for script in scripts/*.sh; do bash -n "$script"; done
       - run: python3 Tests/upgrade.test.py
+      - run: python3 Tests/register-upgrade.test.py
       - run: python3 Tests/proxmox.test.py
       - run: python3 Tests/server-init.test.py
       - run: sudo apt-get update && sudo apt-get install -y shellcheck

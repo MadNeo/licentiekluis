@@ -7,6 +7,7 @@ source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 [[ -f "$source_dir/GITHUB-REVISION" ]] || { exec bash "$source_dir/scripts/install-lxc.sh" upgrade; }
 dotnet=/opt/licentiekluis/dotnet/dotnet
 export DOTNET_ROOT=/opt/licentiekluis/dotnet
+export PATH="$DOTNET_ROOT:$PATH"
 stage=$(mktemp -d /opt/licentiekluis/stage.XXXXXX)
 backup_dir=$(mktemp -d /opt/licentiekluis/backup-$(date +%Y%m%d-%H%M%S).XXXXXX)
 stopped=0
@@ -62,3 +63,4 @@ done
 bash "$source_dir/scripts/register-upgrade.sh"
 committed=1
 echo "Upgrade gereed. Database, accounts, sleutels en SMTP-instellingen behouden. Back-up: $backup_dir"
+

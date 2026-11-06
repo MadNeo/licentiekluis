@@ -51,3 +51,15 @@ Herstellen is samenvoegen: records met hetzelfde ID worden vervangen, andere rec
 - Back-upuitwisseling met een onafhankelijke implementatie van het Windows/.NET LKV1-formaat, verkeerde wachtwoorden en beschadigde bestanden.
 - Gepubliceerde server: routes, authenticatie, synchronisatie en versleutelde gegevens na herstart.
 - Chromium met synthetische API: gebruikers/licenties beheren, conflicten, back-up/herstel, e-mailcontrole, verbindingsverlies, opnieuw inloggen, mobiel en vergrendeling. Geen echte e-mailverzending.
+
+## Fout: upgrade: command not found
+
+Het commando ontbreekt of staat niet in het zoekpad van de console. Herstel en start de update als root **binnen de bestaande LicentieKluis-container**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MadNeo/licentiekluis/main/scripts/install-lxc.sh -o /root/licentiekluis-upgrade.sh && bash /root/licentiekluis-upgrade.sh upgrade
+```
+
+Laat de GitHub-tokenvraag leeg voor de openbare repository. De procedure registreert eerst het commando en begint daarna aan de update. Database en instellingen blijven behouden. Dit is een upgrade, geen nieuwe installatie. Een bestaande LicentieKluis-service is vereist.
+
+Controle achteraf: `upgrade --help`. Voortaan volstaat `upgrade`. De registratie beschermt andere bestaande commando's met dezelfde naam en biedt ook toegang via `/usr/bin/upgrade` als `/usr/local/bin` ontbreekt in PATH.

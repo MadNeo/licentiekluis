@@ -34,5 +34,9 @@ cat "$work/archive-name" > "$work/source/GITHUB-REVISION"
 if [[ "$action" == install ]]; then
     bash "$work/source/scripts/install-local.sh"
 else
+    [[ -f /etc/systemd/system/licentiekluis.service ]] || { echo "LicentieKluis-service ontbreekt; maak eerst de serverinstallatie af." >&2; exit 1; }
+    # Repair missing upgrade commands before attempting the build.
+    bash "$work/source/scripts/register-upgrade.sh"
     bash "$work/source/scripts/update-server.sh"
 fi
+

@@ -24,6 +24,7 @@ curl --fail --show-error --location --proto '=https' --tlsv1.2 https://dot.net/v
 bash /opt/licentiekluis/dotnet-install.sh --channel 10.0 --install-dir /opt/licentiekluis/dotnet --no-path
 chmod -R a+rX /opt/licentiekluis/dotnet
 export DOTNET_ROOT=/opt/licentiekluis/dotnet
+export PATH="$DOTNET_ROOT:$PATH"
 /opt/licentiekluis/dotnet/dotnet run --project "$source_dir/Tests/LicenseVault.Tests.csproj" -c Release
 /opt/licentiekluis/dotnet/dotnet publish "$source_dir/Server/LicenseVault.Server.csproj" -c Release --self-contained false -p:UseAppHost=false -o /opt/licentiekluis/app
 cp "$source_dir/GITHUB-REVISION" /opt/licentiekluis/app/GITHUB-REVISION
@@ -67,6 +68,7 @@ https://$server_name {
 CADDY
 chmod 644 /etc/caddy/Caddyfile /etc/systemd/system/licentiekluis.service
 chmod 755 /etc/caddy
+bash "$source_dir/scripts/register-upgrade.sh"
 caddy validate --config /etc/caddy/Caddyfile
 systemctl daemon-reload
 systemctl enable --now licentiekluis
@@ -92,6 +94,5 @@ done
 echo "Server: https://$server_name"
 echo 'De .NET runtime is lokaal geinstalleerd. Bij bouwen uit broncode is ook de SDK aanwezig.'
 
-bash "$source_dir/scripts/register-upgrade.sh"
 echo "Voortaan bijwerken met: upgrade"
 
