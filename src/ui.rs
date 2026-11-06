@@ -144,7 +144,7 @@ impl App {
     fn select_tab(&self){let changes=self.tabs.selected_tab()==1;theme::show_body(&self.body_children,!changes);self.changelog.set_visible(changes);if changes{self.changelog.set_focus();}theme::repaint(&self.window,self.theme.dark.get());}
     fn event(&self,event:nwg::Event,handle:nwg::ControlHandle){
         if event==nwg::Event::OnButtonClick && handle==self.theme_button.handle {if let Err(e)=self.set_theme(!self.theme.dark.get()){self.error(e);}return;}
-        if event==nwg::Event::OnTabsContainerChanged && handle==self.tabs.handle {self.select_tab();return;}
+        if event==nwg::Event::TabsContainerChanged && handle==self.tabs.handle {self.select_tab();return;}
 
         if event==nwg::Event::OnNotice && handle==self.notice.handle {if self.mail_result.lock().map(|s|s.is_some()).unwrap_or(false){self.finish_mail();}else{self.finish_work();}return;}
         if event==nwg::Event::OnTimerTick && handle==self.timer.handle {self.tick();return;}

@@ -98,7 +98,7 @@ fn native_windows_show_text_and_unobstructed_controls() {
         snapshot(app.mail_window.handle.hwnd().unwrap(), &screenshots.join("05-mail-dark.bmp"),true);
         app.mail_window.set_visible(false);paint_now(&app.window);snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("06-main-dark.bmp"),true);
         reachable(&app.theme_button.handle);assert_eq!(app.tabs.tab_count(),2);
-        app.tabs.set_selected_tab(1);app.event(nwg::Event::OnTabsContainerChanged,app.tabs.handle.clone());paint_now(&app.window);
+        app.tabs.set_selected_tab(1);app.event(nwg::Event::TabsContainerChanged,app.tabs.handle.clone());paint_now(&app.window);
         reachable(&app.changelog.handle);assert!(app.changelog.text().contains(env!("CARGO_PKG_VERSION")));assert_eq!(IsWindowVisible(app.fields[NAME].handle.hwnd().unwrap()),0);
         snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("07-changelog-dark.bmp"),true);
         app.tabs.set_selected_tab(0);app.select_tab();reachable(&app.fields[NAME].handle);
