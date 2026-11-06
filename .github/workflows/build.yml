@@ -41,6 +41,11 @@ jobs:
           node /tmp/lkv-browser/node_modules/playwright/cli.js install --with-deps chromium
       - name: Browser management regression tests
         run: NODE_PATH=/tmp/lkv-browser/node_modules node Tests/manage.browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LicentieKluis-Web-UI-tests
+          path: /tmp/licentiekluis-web-*.png
       - run: for script in scripts/*.sh; do bash -n "$script"; done
       - run: python3 Tests/upgrade.test.py
       - run: python3 Tests/proxmox.test.py

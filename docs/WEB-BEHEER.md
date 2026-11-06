@@ -30,7 +30,7 @@ Gelijktijdige wijzigingen worden niet stilzwijgend overschreven. **Conflicten** 
 
 De geopende pagina kan verder werken met de geladen gegevens. Wachtende wijzigingen worden met AES-256-GCM en een van het serverwachtwoord afgeleide sleutel versleuteld in `sessionStorage` opgeslagen. Na opnieuw inloggen in hetzelfde tabblad wordt de wachtrij hervat. Wachtwoorden en sessietokens worden niet in browseropslag bewaard. Bij geblokkeerde/volle browseropslag verschijnt een fout; houd het tabblad open en download een back-up.
 
-Dit is **geen zelfstandige offline Windows-database**. Het sluiten van het tabblad kan de herstelwachtrij verwijderen; maak bij een storing eerst een back-up. Voor langdurig offline werken, ook na het opnieuw starten van het programma, gebruik je de Windows-app. De webpagina vergrendelt na 15 minuten inactiviteit. Bij een gewijzigd serverwachtwoord kan een bestaande wachtrij nog met het oude wachtwoord versleuteld zijn; bewaar dan het tabblad en herstel de versleutelde gegevens met dat oorspronkelijke wachtwoord.
+Dit is **geen zelfstandige offline Windows-database**. Het sluiten van het tabblad kan de herstelwachtrij verwijderen; maak bij een storing eerst een back-up. Voor langdurig offline werken, ook na het opnieuw starten van het programma, gebruik je de Windows-app. De webpagina vergrendelt na 15 minuten inactiviteit. Bij een gewijzigd serverwachtwoord kan een bestaande wachtrij nog met het oude wachtwoord versleuteld zijn; download dan de herstelback-up via het inlogscherm en importeer deze met het oorspronkelijke wachtwoord.
 
 ## Back-up en herstellen
 
