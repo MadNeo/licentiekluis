@@ -83,7 +83,7 @@ app.MapGet("/manage.js", () => Results.File(Path.Combine(webRoot, "manage.js"), 
 app.MapGet("/app.js", () => Results.File(Path.Combine(webRoot, "app.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/mail.js", () => Results.File(Path.Combine(webRoot, "mail.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/app.css", () => Results.File(Path.Combine(webRoot, "app.css"), "text/css; charset=utf-8"));
-app.MapGet("/health", () => Results.Ok(new { status = "ok", version = "0.7.0" }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok", version = "0.7.1" }));
 app.MapGet("/api/mail/status", () => Results.Ok(new { configured = File.Exists(smtpPath) }));
 app.MapPost("/api/mail/send", async (LicenseMailRequest request) =>
 {

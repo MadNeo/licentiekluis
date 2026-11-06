@@ -1,5 +1,12 @@
 # LicentieKluis — wijzigingen
 
+## Web 0.7.1 — 6 november 2026
+
+- Vernieuwd dashboard met compacte filters, duidelijke licentiekaarten en een eigen deelblok.
+- Nieuw inlogscherm, consistente dialoogvensters en verbeterde mobiele indeling.
+- Bijgewerkte lichte en donkere kleuren, toetsenbordfocus en navigatielink naar de inhoud.
+- Bestaande beheerfuncties, versleuteling, back-ups en synchronisatie blijven behouden.
+
 ## 0.7.0 — 6 november 2026
 
 Windows en web
