@@ -1,27 +1,20 @@
 # LicentieKluis
 
-Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Versie 0.3.0-preview met GitHub-installatie en upgradefunctie.
+Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Web/server 0.6 met GitHub-installatie en upgradefunctie. De Windowsclient heeft een eigen versienummer.
 
 ## Server installeren in Proxmox-LXC
 
-Gebruik een **aparte Ubuntu 24.04 LTS x86_64 LXC** met systemd, een vast IP-adres en internet. Voer de commando's als root **in de container** uit. De installer maakt geen container aan op de Proxmox-host.
-
-De repository is privé. Download `scripts/install-lxc.sh` via GitHub en kopieer het bestand naar `/root/install-lxc.sh` in de container. Start vervolgens:
+Open de shell van je **Proxmox-host** als root en voer uit:
 
 ```bash
-bash /root/install-lxc.sh
+curl -fsSL https://raw.githubusercontent.com/MadNeo/licentiekluis/main/scripts/install-proxmox.sh -o /root/install-proxmox.sh && bash /root/install-proxmox.sh
 ```
 
-Voer bij de vraag een GitHub-token in met leestoegang tot de inhoud van `MadNeo/licentiekluis` (fine-grained token, Contents: Read-only). Het token wordt verborgen ingevoerd en niet standaard bewaard. De installer haalt altijd de actuele broncode van **main** op, installeert de .NET 10 SDK, voert servertests uit en bouwt de server. Daarna vraagt deze om het serverbeheeraccount. De Windowsclient wordt afzonderlijk gebouwd.
+De wizard maakt een Ubuntu 24.04-container en installeert Caddy, .NET 10 en de actuele LicentieKluis-broncode van main. De repository is openbaar; laat de tokenvraag leeg. Zie [de Proxmox-installatiehandleiding](docs/PROXMOX-INSTALLATIE.md) voor netwerkkeuzes, hervatten, accounts en certificaten.
 
-Alleen wanneer de repository openbaar is, kan het eerste script ook zo worden opgehaald:
+Heb je al een geschikte lege container, dan kun je daar als root `scripts/install-lxc.sh` uitvoeren. Gebruik bij een bestaande LicentieKluis-installatie altijd `upgrade`.
 
-```bash
-curl -fL https://raw.githubusercontent.com/MadNeo/licentiekluis/main/scripts/install-lxc.sh -o /root/install-lxc.sh
-bash /root/install-lxc.sh
-```
-
-Open daarna `https://<IP-of-DNS-naam>/`. Vertrouw het aangemaakte Caddy-CA-certificaat op je apparaten; zie `README.html`. Webportaal: licenties bekijken, filteren, codes tonen en geselecteerde licenties mailen. Bewerken via de Windowsclient.
+Open daarna `https://<IP-of-DNS-naam>/` en vertrouw het Caddy-CA-certificaat op je apparaat. Het webportaal ondersteunt gebruikers- en licentiebeheer, installatiegegevens, filters, codeweergave, e-mail, versleutelde back-up/herstel en revisieconflicten. Zie [de webhandleiding](docs/WEB-BEHEER.md). Bestaande gegevens en synchronisatie met Windows blijven behouden. Voor zelfstandig offline gebruik blijft de Windows-app beschikbaar.
 
 ## Bijwerken
 
@@ -75,3 +68,4 @@ Zie GitHub Actions voor de actuele buildresultaten. Een volledige installatie en
 - [Handleiding Windowssoftware](docs/LicentieKluis_Windows_Handleiding.pdf)
 
 Dit zijn de eerder opgeleverde PDF-handleidingen. Voor de daarna toegevoegde GitHub-installatie en het commando `upgrade` volg je de actuele instructies hierboven.
+
