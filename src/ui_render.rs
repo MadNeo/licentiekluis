@@ -108,3 +108,30 @@ pub fn bind_label(label:&nwg::Label, theme:Rc<Theme>)->Result<nwg::RawEventHandl
     unsafe{SetWindowPos(label.handle.hwnd().unwrap(),std::ptr::null_mut(),0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE|SWP_FRAMECHANGED);}
     Ok(handler)
 }
+
+/// Preserve the native tab keyboard/click behavior while painting its full
+/// client area; the classic control otherwise leaves a white strip in dark mode.
+pub fn bind_tabs(tabs:&nwg::TabsContainer,theme:Rc<Theme>)->Result<nwg::RawEventHandler,nwg::NwgError>{
+    nwg::bind_raw_event_handler(&tabs.handle,0x4C4B0003,move|hwnd,msg,w,_|{
+        if msg!=WM_PAINT&&msg!=WM_ERASEBKGND{return None;}
+        unsafe{
+            use winapi::um::{wingdi::*,commctrl::*};
+            let mut ps:PAINTSTRUCT=std::mem::zeroed();let dc=if msg==WM_PAINT{BeginPaint(hwnd,&mut ps)}else{w as HDC};
+            let mut rect:RECT=std::mem::zeroed();GetClientRect(hwnd,&mut rect);FillRect(dc,&rect,theme.brush([255,255,255]));
+            if msg==WM_PAINT{
+                let font=SendMessageW(hwnd,WM_GETFONT,0,0);let old_font=SelectObject(dc,font as _);SetBkMode(dc,TRANSPARENT as i32);
+                let selected=SendMessageW(hwnd,TCM_GETCURSEL,0,0);let count=SendMessageW(hwnd,TCM_GETITEMCOUNT,0,0);
+                for i in 0..count{
+                    let mut item:RECT=std::mem::zeroed();SendMessageW(hwnd,TCM_GETITEMRECT,i as usize,&mut item as *mut _ as isize);
+                    let active=i==selected;let brush=theme.brush(if active{[20,139,125]}else{[255,255,255]});
+                    let old_brush=SelectObject(dc,brush as _);let pen=CreatePen(PS_SOLID as i32,1,theme.border());let old_pen=SelectObject(dc,pen as _);
+                    RoundRect(dc,item.left,item.top,item.right,item.bottom,10,10);SelectObject(dc,old_brush);SelectObject(dc,old_pen);DeleteObject(pen as _);
+                    let mut text=[0u16;128];let mut info:TCITEMW=std::mem::zeroed();info.mask=TCIF_TEXT;info.pszText=text.as_mut_ptr();info.cchTextMax=128;SendMessageW(hwnd,TCM_GETITEMW,i as usize,&mut info as *mut _ as isize);
+                    SetTextColor(dc,if active{RGB(255,255,255)}else{theme.ink()});DrawTextW(dc,text.as_ptr(),-1,&mut item,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+                }
+                SelectObject(dc,old_font);EndPaint(hwnd,&ps);
+            }
+        }
+        Some(1)
+    })
+}

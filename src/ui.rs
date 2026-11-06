@@ -139,6 +139,9 @@ impl App {
             if parent.handle==window.handle {paint_handlers.push(render::bind_label(&status,theme.clone())?);}
             theme::repaint(parent,theme.dark.get());
         }
+        paint_handlers.push(render::bind_tabs(&tabs,theme.clone())?);
+        for tab in [&tab_main,&tab_changes]{unsafe{winapi::um::winuser::ShowWindow(tab.handle.hwnd().unwrap(),winapi::um::winuser::SW_HIDE);}}
+        theme::repaint(&window,theme.dark.get());
         Ok(Self{theme,theme_path,theme_button,tabs,_tabs:vec![tab_main,tab_changes],changelog,body_children,sync_busy:Cell::new(false),epoch:Cell::new(0),connection:RefCell::new(None),paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
     }
     fn error(&self,e:anyhow::Error){self.modal.set(true);nwg::modal_error_message(&self.window,"Bewerking niet voltooid",&format!("{e:#}"));self.modal.set(false);}
@@ -146,7 +149,7 @@ impl App {
     fn snapshot(&self)->Result<LocalState>{self.state.borrow().clone().context("Ontgrendel eerst de kluis")}
     fn commit(&self,next:LocalState)->Result<()>{let p=self.password.borrow();database::save(&self.path,&next,p.as_ref().context("Kluis vergrendeld")?)?;drop(p);*self.state.borrow_mut()=Some(next);self.dirty.set(false);self.refresh();Ok(())}
     fn set_theme(&self,dark:bool)->Result<()> {self.theme.dark.set(dark);self.theme_button.set_text(if dark{"Lichte modus"}else{"Donkere modus"});for window in [&self.window,&self.settings_window,&self.mail_window]{theme::repaint(window,dark);}self.theme.save(&self.theme_path)}
-    fn select_tab(&self){let changes=self.tabs.selected_tab()==1;theme::show_body(&self.body_children,!changes);self.changelog.set_visible(changes);if changes{self.changelog.set_focus();}theme::repaint(&self.window,self.theme.dark.get());}
+    fn select_tab(&self){for tab in &self._tabs{unsafe{winapi::um::winuser::ShowWindow(tab.handle.hwnd().unwrap(),winapi::um::winuser::SW_HIDE);}}let changes=self.tabs.selected_tab()==1;theme::show_body(&self.body_children,!changes);self.changelog.set_visible(changes);if changes{self.changelog.set_focus();}theme::repaint(&self.window,self.theme.dark.get());}
     fn event(&self,event:nwg::Event,handle:nwg::ControlHandle){
         if event==nwg::Event::OnButtonClick && handle==self.theme_button.handle {if let Err(e)=self.set_theme(!self.theme.dark.get()){self.error(e);}return;}
         if event==nwg::Event::TabsContainerChanged && handle==self.tabs.handle {self.select_tab();return;}

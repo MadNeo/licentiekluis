@@ -93,6 +93,8 @@ fn native_windows_show_text_and_unobstructed_controls() {
         paint_now(&app.settings_window);snapshot(app.settings_window.handle.hwnd().unwrap(),&screenshots.join("04-settings-dark.bmp"),true);
         app.settings_window.set_visible(false);
         paint_now(&app.window);
+        let tab=app.tabs.handle.hwnd().unwrap();let mut tab_rect:RECT=mem::zeroed();GetClientRect(tab,&mut tab_rect);let tab_dc=GetDC(tab);
+        assert_eq!(GetPixel(tab_dc,tab_rect.right-2,2),app.theme.background(),"Tab margins must follow dark theme");ReleaseDC(tab,tab_dc);
         let title=app.labels[0].handle.hwnd().unwrap();let dc=GetDC(title);
         assert_eq!(GetPixel(dc,1,1),app.theme.background(),"Label margins must follow dark theme, not retain white strips");ReleaseDC(title,dc);
         paint_now(&app.mail_window);
