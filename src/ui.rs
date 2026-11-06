@@ -140,7 +140,7 @@ impl App {
             theme::repaint(parent,theme.dark.get());
         }
         paint_handlers.push(render::bind_tabs(&tabs,theme.clone())?);
-        for tab in [&tab_main,&tab_changes]{unsafe{winapi::um::winuser::ShowWindow(tab.handle.hwnd().unwrap(),winapi::um::winuser::SW_HIDE);}}
+        for tab in [&tab_main,&tab_changes]{paint_handlers.push(render::bind_tab_page(&tab.handle,theme.clone())?);unsafe{winapi::um::winuser::ShowWindow(tab.handle.hwnd().unwrap(),winapi::um::winuser::SW_HIDE);}}
         theme::repaint(&window,theme.dark.get());
         Ok(Self{theme,theme_path,theme_button,tabs,_tabs:vec![tab_main,tab_changes],changelog,body_children,sync_busy:Cell::new(false),epoch:Cell::new(0),connection:RefCell::new(None),paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
     }

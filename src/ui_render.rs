@@ -127,11 +127,19 @@ pub fn bind_tabs(tabs:&nwg::TabsContainer,theme:Rc<Theme>)->Result<nwg::RawEvent
                     let old_brush=SelectObject(dc,brush as _);let pen=CreatePen(PS_SOLID as i32,1,theme.border());let old_pen=SelectObject(dc,pen as _);
                     RoundRect(dc,item.left,item.top,item.right,item.bottom,10,10);SelectObject(dc,old_brush);SelectObject(dc,old_pen);DeleteObject(pen as _);
                     let mut text=[0u16;128];let mut info:TCITEMW=std::mem::zeroed();info.mask=TCIF_TEXT;info.pszText=text.as_mut_ptr();info.cchTextMax=128;SendMessageW(hwnd,TCM_GETITEMW,i as usize,&mut info as *mut _ as isize);
-                    SetTextColor(dc,if active{RGB(255,255,255)}else{theme.ink()});DrawTextW(dc,text.as_ptr(),-1,&mut item,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+                    SetTextColor(dc,if active{RGB(255,255,255)}else{theme.ink()});DrawTextW(dc,text.as_ptr(),-1,&mut item,DT_CENTER|DT_VCENTER|DT_SINGLELINE);if active&&GetFocus()==hwnd{InflateRect(&mut item,-3,-3);DrawFocusRect(dc,&item);}
                 }
                 SelectObject(dc,old_font);EndPaint(hwnd,&ps);
             }
         }
+        Some(1)
+    })
+}
+
+pub fn bind_tab_page(handle:&nwg::ControlHandle,theme:Rc<Theme>)->Result<nwg::RawEventHandler,nwg::NwgError>{
+    nwg::bind_raw_event_handler(handle,0x4C4B0004,move|hwnd,msg,w,_|{
+        if msg!=WM_PAINT&&msg!=WM_ERASEBKGND{return None;}
+        unsafe{let mut ps:PAINTSTRUCT=std::mem::zeroed();let dc=if msg==WM_PAINT{BeginPaint(hwnd,&mut ps)}else{w as HDC};let mut rect:RECT=std::mem::zeroed();GetClientRect(hwnd,&mut rect);FillRect(dc,&rect,theme.brush([255,255,255]));if msg==WM_PAINT{EndPaint(hwnd,&ps);}}
         Some(1)
     })
 }
