@@ -2,7 +2,7 @@ name: Build and test LicentieKluis
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'web/**']
 jobs:
   native-windows:
     runs-on: windows-latest
@@ -33,6 +33,14 @@ jobs:
       - run: dotnet publish Server/LicenseVault.Server.csproj -c Release --self-contained false -p:UseAppHost=false -o output/Server
       - run: node Tests/web.test.cjs
       - run: node Tests/mail.test.cjs
+      - run: node Tests/vault.test.cjs
+      - run: python3 Tests/server-web.test.py
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix /tmp/lkv-browser --no-package-lock playwright@1.62.1
+          node /tmp/lkv-browser/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Browser management regression tests
+        run: NODE_PATH=/tmp/lkv-browser/node_modules node Tests/manage.browser.cjs
       - run: for script in scripts/*.sh; do bash -n "$script"; done
       - run: python3 Tests/upgrade.test.py
       - run: python3 Tests/proxmox.test.py
@@ -43,4 +51,5 @@ jobs:
         with:
           name: LicentieKluis-Server
           path: output/Server/
+
 

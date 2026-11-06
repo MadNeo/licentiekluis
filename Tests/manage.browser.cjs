@@ -1,0 +1,43 @@
+// Actual Chromium UI, synthetic API fixtures; no email is delivered.
+const {chromium}=require('playwright'),http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto');
+const root=path.join(__dirname,'../Server/wwwroot'),records=new Map(),vaultId=randomUUID();let offline=false,requests=0;
+const server=http.createServer(async(req,res)=>{
+ const json=(value,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));};
+ if(req.url.startsWith('/api/')){if(offline){res.destroy();return;}let body='';for await(const part of req)body+=part;
+ if(req.url==='/api/login')return json({token:'synthetic-test-token',vaultId});
+ if(req.url==='/api/logout')return json({});
+ if(req.url==='/api/sync'){requests++;const data=JSON.parse(body),applied=[],conflicts=[];assert.equal(data.vaultId,vaultId);for(const c of data.changes){const old=records.get(c.value.id);if(old?.mutationId===c.value.mutationId){applied.push(c.value.id);continue;}if((old?.revision||0)!==c.baseRevision){conflicts.push(c.value.id);continue;}records.set(c.value.id,{...c.value,revision:(old?.revision||0)+1});applied.push(c.value.id);}return json({entries:[...records.values()],applied,conflicts});}
+ if(req.url==='/api/mail/status')return json({configured:true});
+ if(req.url.endsWith('/code'))return json({code:records.get(req.url.split('/')[3]).code});
+ return json({},404);
+ }
+ const file=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js','vault.js','manage.js','mail.js','app.css'].includes(file)){res.writeHead(404);res.end();return;}
+ res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");res.end(fs.readFileSync(path.join(root,file)));
+});
+(async()=>{
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+ try{const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
+ const url=`http://127.0.0.1:${server.address().port}`;await page.goto(url);
+ const login=async()=>{await page.fill('#username','test');await page.fill('#password','synthetic-test-password');await page.click('#submit');await page.waitForFunction(()=>document.querySelector('#dashboard').hidden===false);};
+ const settled=()=>page.waitForFunction(()=>typeof vault!=='undefined'&&vault&&!syncWork&&vault.pending.size===0);
+ await login();await settled();
+ await page.click('#managePeople');await page.fill('#personName','Gebruiker A');await page.click('#newPersonForm button');await settled();await page.click('#peopleClose');
+ const person=[...records.values()][0];await page.click('#newLicense');await page.fill('#licenseName','Office');await page.selectOption('#licenseOwner',person.id);await page.fill('#licenseCode','TEST-KEY');await page.fill('#licenseVersion','2026');await page.fill('#licenseExpires','2027-12-31');await page.fill('#licenseNotes','Testnotitie');await page.click('#addInstall');await page.fill('#installRows input','Laptop kantoor');await page.click('#editForm button[type=submit]');await settled();
+ let license=[...records.values()].find(e=>e.kind==='license');assert.equal(license.code,'TEST-KEY');assert.equal(license.installations[0].device,'Laptop kantoor');
+ await page.locator('.license').getByRole('button',{name:'Bewerken',exact:true}).click();await page.fill('#licenseName','Office aangepast');await page.click('#editForm button[type=submit]');await settled();assert.equal(records.get(license.id).name,'Office aangepast');
+ // A background refresh while the editor is open creates a visible conflict.
+ await page.locator('.license').getByRole('button',{name:'Bewerken',exact:true}).click();const remote=records.get(license.id);records.set(remote.id,{...remote,name:'Windows versie',revision:remote.revision+1,mutationId:randomUUID()});await page.evaluate(()=>refresh());await page.fill('#licenseName','Webversie');await page.click('#editForm button[type=submit]');await page.waitForFunction(()=>vault.conflicts.size===1);await page.click('#conflicts');await page.getByRole('button',{name:'Mijn wijziging behouden'}).click();await settled();await page.click('#conflictsClose');assert.equal(records.get(license.id).name,'Webversie');
+ // Existing mail selection/preview still works after editing.
+ await page.check('.mailCheck input');await page.fill('#mailRecipient','synthetic@example.test');await page.click('#mailPrepare');await page.waitForSelector('#mailDialog[open]');assert.match(await page.textContent('#mailPreview'),/TEST-KEY/);await page.click('#mailCancel');
+ // Encrypted export/import review and merge; unrelated records survive.
+ await page.click('#backupOpen');await page.fill('#backupPassword','synthetic-backup-password');await page.fill('#backupRepeat','synthetic-backup-password');const downloadPromise=page.waitForEvent('download');await page.click('#backupExport');const download=await downloadPromise;const backupPath=await download.path();assert.equal(fs.readFileSync(backupPath).subarray(0,4).toString(),'LKV1');await page.setInputFiles('#backupFile',backupPath);await page.click('#restoreRead');await page.waitForFunction(()=>!document.querySelector('#restoreApply').disabled);await page.click('#restoreApply');await settled();
+ // Loss of network: retain changes encrypted, lock, relogin and retry.
+ offline=true;await page.locator('.license').getByRole('button',{name:'Bewerken',exact:true}).click();await page.fill('#licenseNotes','Wijziging tijdens storing');await page.click('#editForm button[type=submit]');await page.waitForFunction(()=>vault.pending.size===1&&!syncWork);const stored=await page.evaluate(()=>Object.values(sessionStorage).join(''));assert.ok(stored);assert.ok(!stored.includes('Wijziging tijdens storing'));await page.click('#logout');offline=false;await login();await settled();assert.equal(records.get(license.id).notes,'Wijziging tijdens storing');
+ // Deleting an owner retains the license and historical ownership.
+ await page.click('#managePeople');await page.locator('#peopleList').getByRole('button',{name:'Verwijderen'}).click();await settled();await page.click('#peopleClose');assert.equal(records.get(person.id).deleted,true);assert.equal(records.get(license.id).deleted,false);assert.match(await page.textContent('#licenses'),/Verwijderde gebruiker/);
+ // Responsive layout and lock removes sensitive forms.
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/tmp/licentiekluis-web-mobile.png',fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.setViewportSize({width:1280,height:900});await page.screenshot({path:'/tmp/licentiekluis-web-desktop.png',fullPage:true});
+ await page.locator('.license').getByRole('button',{name:'Bewerken',exact:true}).click();await page.evaluate(()=>localLock());assert.equal(await page.inputValue('#licenseCode'),'');assert.equal(await page.locator('dialog[open]').count(),0);assert.deepEqual(errors,[]);
+ console.log(`PASS: Chromium CRUD, concurrent Windows edit/conflict, mail preview, encrypted backup/restore, outage/relogin recovery, owner deletion, mobile layout and lock (${requests} sync calls)`);
+ }finally{await browser.close();server.close();}
+})().catch(e=>{console.error(e);server.close();process.exitCode=1;});
