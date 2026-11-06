@@ -11,7 +11,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.url.endsWith('/code'))return json({code:records.get(req.url.split('/')[3]).code});
  return json({},404);
  }
- const file=req.url==='/'?'index.html':req.url==='/changelog'?'changelog.html':req.url.slice(1);if(file==='changelog.txt'){res.setHeader('Content-Type','text/plain');res.end(fs.readFileSync(path.join(root,'../../..','CHANGELOG.md')));return;}if(!['index.html','app.js','vault.js','manage.js','mail.js','app.css','theme.js','changelog.js','changelog.html'].includes(file)){res.writeHead(404);res.end();return;}
+ const file=req.url==='/'?'index.html':req.url==='/changelog'?'changelog.html':req.url.slice(1);if(file==='changelog.txt'){res.setHeader('Content-Type','text/plain');res.end(fs.readFileSync(path.join(root,'../..','CHANGELOG.md')));return;}if(!['index.html','app.js','vault.js','manage.js','mail.js','app.css','theme.js','changelog.js','changelog.html'].includes(file)){res.writeHead(404);res.end();return;}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");res.end(fs.readFileSync(path.join(root,file)));
 });
 (async()=>{

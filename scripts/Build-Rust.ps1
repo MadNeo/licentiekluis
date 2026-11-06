@@ -22,7 +22,11 @@ try {
     New-Item -ItemType Directory -Force $output | Out-Null
     Copy-Item 'target\x86_64-pc-windows-msvc\release\licentiekluis-native.exe' (Join-Path $output 'LicentieKluis-Rust.exe') -Force
     Copy-Item README.html $output -Force
+    Copy-Item CHANGELOG.md $output -Force
+    Copy-Item docs/WEERGAVE.md $output -Force
+    Copy-Item docs/WINDOWS-OFFLINE.md $output -Force
     $size = (Get-Item (Join-Path $output 'LicentieKluis-Rust.exe')).Length
     Write-Host ('Gebouwd: {0:N2} MB. Bestand: {1}' -f ($size / 1MB), (Join-Path $output 'LicentieKluis-Rust.exe'))
     Write-Host 'Deze Rust-client heeft geen .NET of WebView2 nodig. Test het programma eerst met voorbeeldgegevens.'
 } finally { Pop-Location }
+
