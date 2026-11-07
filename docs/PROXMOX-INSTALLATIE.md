@@ -59,6 +59,18 @@ Import-Certificate -FilePath "$env:USERPROFILE\Downloads\licentiekluis-ca.crt" -
 
 Vertrouw alleen de CA van je eigen installatie. Daarna kun je de HTTPS-webpagina openen zonder certificaatwaarschuwing en hetzelfde adres gebruiken in de Windowsapp. Log in met het **serveraccount**, niet automatisch met de LXC-rootlogin.
 
+### Alleen binnen LicentieKluis vertrouwen (Windows 0.9.1)
+
+Gebruik het publieke `licentiekluis-ca.crt` van je eigen LXC. Bij installatie via Proxmox staat er ook een kopie in `/root/licentiekluis-CTID-ca.crt` op de host. Controleer in de LXC-console de vingerafdruk:
+
+```bash
+openssl x509 -in /root/licentiekluis-ca.crt -noout -fingerprint -sha256
+```
+
+Ontgrendel de lokale kluis en open **Verbinding & back-up**. Gebruik het HTTPS-adres dat bij de installatie is ingesteld. Als er nog geen verbinding opgeslagen is, klik dan eerst op **Aanmelden** met je serveraccount. Ook bij een certificaatmelding bewaart de app de verbinding voor de volgende poging.
+
+Klik op **CA-certificaat kiezen**, selecteer het gekopieerde bestand en vergelijk de SHA-256-vingerafdruk. Bevestig alleen als die overeenkomt. De app probeert meteen opnieuw te synchroniseren. Met **CA-certificaat wissen** gebruik je weer het Windows-certificaatarchief.
+
 ## Upgrade met behoud van gegevens
 
 Op de Proxmox-host: `pct enter 102`. Vervolgens binnen de container:
