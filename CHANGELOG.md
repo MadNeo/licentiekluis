@@ -1,5 +1,12 @@
 # LicentieKluis — wijzigingen
 
+## Windows 0.9.2
+
+- Tijdelijk synchroniseren via HTTPS zonder certificaatcontrole voor lokale IP-adressen en localhost.
+- Bestaande lokale verbindingen starten automatisch in deze tijdelijke modus.
+- Certificaatcontrole kan per verbinding worden aangezet in Verbinding & back-up. De keuze wordt onthouden.
+- Het importeren van een CA-certificaat zet de controle aan. Publieke serveradressen blijven gecontroleerd.
+
 ## Windows 0.9.1
 
 - Voeg het publieke CA-certificaat van een lokale Caddy-server toe in Verbinding & back-up.

@@ -59,6 +59,14 @@ Import-Certificate -FilePath "$env:USERPROFILE\Downloads\licentiekluis-ca.crt" -
 
 Vertrouw alleen de CA van je eigen installatie. Daarna kun je de HTTPS-webpagina openen zonder certificaatwaarschuwing en hetzelfde adres gebruiken in de Windowsapp. Log in met het **serveraccount**, niet automatisch met de LXC-rootlogin.
 
+### Tijdelijke modus voor lokale verbindingen (Windows 0.9.2)
+
+Bij bestaande verbindingen met een lokaal IP-adres staat de certificaatcontrole aanvankelijk uit. HTTPS versleutelt het verkeer, terwijl de identiteit van de server tijdelijk ongecontroleerd blijft. Deze modus geldt voor private IP-adressen, loopback, link-local en localhost.
+
+Gebruik je bestaande HTTPS-adres, bijvoorbeeld `https://192.168.178.198`. Ontgrendel de kluis en klik zo nodig op **Synchroniseren**. Er is voor deze tijdelijke modus geen certificaatbestand nodig.
+
+Zet de controle later aan via **Verbinding & back-up → Certificaatcontrole UIT**. De keuze blijft bewaard na herstart. Het importeren van een CA-certificaat zet de controle ook aan. Bij een publiek adres is controle altijd ingeschakeld.
+
 ### Alleen binnen LicentieKluis vertrouwen (Windows 0.9.1)
 
 Gebruik het publieke `licentiekluis-ca.crt` van je eigen LXC. Bij installatie via Proxmox staat er ook een kopie in `/root/licentiekluis-CTID-ca.crt` op de host. Controleer in de LXC-console de vingerafdruk:

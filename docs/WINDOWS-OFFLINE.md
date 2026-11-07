@@ -1,4 +1,4 @@
-# Windows 0.5.0: lokale database en automatische synchronisatie
+# Windows 0.9.2: lokale database en automatische synchronisatie
 
 ## Opslag los van de exe
 
@@ -25,6 +25,14 @@ Na ontgrendelen probeert de app direct te synchroniseren, daarna iedere 30 secon
 Synchronisatie draait op de achtergrond. Lokale wijzigingen tijdens een netwerkverzoek blijven behouden; niet-opgeslagen invoer wordt niet door een netwerkantwoord gewist. Conflicten worden niet stil overschreven: gebruik **Conflicten** om te kiezen welke versie behouden blijft.
 
 **Afmelden** verwijdert de bewaarde serveraanmelding en stopt automatische synchronisatie. **Vergrendelen** stopt synchronisatie zolang de kluis dicht is; opnieuw ontgrendelen hervat deze. Bij **Herstellen** van een back-up moet de server opnieuw worden aangemeld.
+
+## Tijdelijk zonder certificaatcontrole
+
+Versie 0.9.2 gebruikt voor lokale IP-adressen standaard de tijdelijke modus zonder certificaatcontrole, ook bij bestaande verbindingen. Gebruik hetzelfde HTTPS-adres, bijvoorbeeld `https://192.168.178.198`. Je hoeft geen certificaat te importeren; de status toont **Certificaatcontrole UIT**.
+
+Open later **Verbinding & back-up** en klik op **Certificaatcontrole UIT** om de controle weer aan te zetten. De app bewaart deze keuze en meldt zich opnieuw aan. Voor een eigen Caddy-CA kun je **CA-certificaat kiezen** gebruiken; dit zet de controle ook aan. Zie de [certificaatinstructies](PROXMOX-INSTALLATIE.md#alleen-binnen-licentiekluis-vertrouwen-windows-091).
+
+De tijdelijke modus controleert de serveridentiteit niet. Hij geldt alleen voor private IP-adressen, loopback, link-local en localhost. Publieke serveradressen blijven gecontroleerd.
 
 ## Back-ups en bereikbaarheid
 
