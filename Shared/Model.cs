@@ -4,6 +4,7 @@ public record Installation(string Platform, string Device);
 public record Entry
 {
     public Guid Id { get; init; } = Guid.NewGuid();
+    public RecoveryData? Recovery { get; init; }
     public string Kind { get; init; } = "license";
     public string Name { get; init; } = "";
     public Guid? OwnerId { get; init; }
@@ -40,11 +41,13 @@ public static class SyncEngine
     public static void Validate(Entry e)
     {
         if (e.Id == Guid.Empty || e.MutationId == Guid.Empty || e.Revision < 0 ||
-            e.Kind is not ("person" or "license") || string.IsNullOrWhiteSpace(e.Name) ||
+            e.Kind is not ("person" or "license" or "recovery") || string.IsNullOrWhiteSpace(e.Name) ||
             e.Name.Length > 200 || e.Code.Length > 10000 || e.Notes.Length > 20000 ||
             e.SoftwareVersion.Length > 200 || e.Installations.Count > 100 ||
             e.Installations.Any(i => i.Platform is not ("Windows" or "Linux" or "macOS") || i.Device.Length > 200))
             throw new ArgumentException("Ongeldige invoer of te lange tekst.");
+        if (e.Kind == "recovery") (e.Recovery ?? throw new ArgumentException("Herstelgegevens ontbreken.")).Validate(e.Deleted);
+        else if (e.Recovery is not null) throw new ArgumentException("Herstelgegevens horen bij een herstelsleutel.");
         if (e.Kind == "license" && e.OwnerId is null) throw new ArgumentException("Selecteer een gebruiker.");
     }
     // Caller serializes access and saves the returned copy durably before responding.
@@ -70,6 +73,7 @@ public static class SyncEngine
         foreach (var e in map.Values.Where(e => e.Kind == "license" && !e.Deleted))
             if (!map.TryGetValue(e.OwnerId!.Value, out var owner) || owner.Kind != "person")
                 throw new ArgumentException("Gebruiker ontbreekt; synchroniseer de gebruiker mee.");
+        RecoveryData.ValidateTotal(map.Values);
         var next = new ServerState { VaultId = state.VaultId, Entries = map.Values.ToList() };
         return (next, new SyncResponse(next.Entries, applied, conflicts));
     }

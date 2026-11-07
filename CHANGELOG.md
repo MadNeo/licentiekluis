@@ -1,3 +1,13 @@
+# Windows 1.0.0 / Web en server 0.9.0 — Herstelsleutels
+
+- Nieuw onderdeel Herstelsleutels voor authenticators en crypto-wallets in Windows en web.
+- Handmatige tekst, een UTF-8-tekstbestand en/of een PNG/JPEG-foto. Minimaal één invoervorm; combinaties zijn toegestaan.
+- Bijlagen zitten in de versleutelde kluis en gaan mee in synchronisatie, conflicten en .lkv-back-ups.
+- Inhoud is standaard verborgen. Bekijken sluit na 30 seconden; foto's worden in het geheugen geopend.
+- Herstelsleutels zijn uitgesloten van licentie-e-mails en worden afgeschermd in overzichts-API en conflictvoorbeelden.
+- Oudere clients krijgen een updatemelding bij een kluis met herstelsleutels. Bestaande licenties en oudere back-ups blijven bruikbaar in de nieuwe versie.
+- Grenswaarden: handmatige tekst 20.000 tekens, .txt 64 KB, foto 2 MB; samen 8 MB herstelinhoud per kluis.
+
 # LicentieKluis — wijzigingen
 
 ## Web 0.8.0 en Windows 0.9.3

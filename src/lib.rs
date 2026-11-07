@@ -5,3 +5,4 @@ pub mod mail;
 
 pub mod database;
 
+pub mod recovery;

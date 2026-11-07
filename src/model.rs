@@ -12,6 +12,7 @@ pub struct Installation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
+    #[serde(default,alias="Recovery")] pub recovery: Option<crate::recovery::Recovery>,
     #[serde(alias="Id")] pub id: Uuid,
     #[serde(alias="Kind")] pub kind: String,
     #[serde(alias="Name")] pub name: String,
@@ -26,15 +27,17 @@ pub struct Entry {
     #[serde(alias="MutationId")] pub mutation_id: Uuid,
 }
 impl Entry {
-    pub fn new(kind: &str, name: &str) -> Self { Self { id: Uuid::new_v4(), kind: kind.into(), name:name.into(), owner_id:None, code:String::new(), software_version:String::new(), notes:String::new(), expires:None, installations:vec![], deleted:false, revision:0, mutation_id:Uuid::new_v4() } }
+    pub fn new(kind: &str, name: &str) -> Self { Self { recovery:None, id: Uuid::new_v4(), kind: kind.into(), name:name.into(), owner_id:None, code:String::new(), software_version:String::new(), notes:String::new(), expires:None, installations:vec![], deleted:false, revision:0, mutation_id:Uuid::new_v4() } }
     pub fn validate(&self) -> Result<()> {
         ensure!(!self.id.is_nil() && !self.mutation_id.is_nil() && self.revision>=0, "Ongeldige recordidentiteit");
-        ensure!(self.kind=="person" || self.kind=="license", "Ongeldig recordtype");
+        ensure!(self.kind=="person" || self.kind=="license" || self.kind=="recovery", "Ongeldig recordtype");
         ensure!(!self.name.trim().is_empty() && self.name.encode_utf16().count()<=200,"Vul een naam in (maximaal 200 tekens)");
         ensure!(self.code.encode_utf16().count()<=10000 && self.notes.encode_utf16().count()<=20000 && self.software_version.encode_utf16().count()<=200,"Tekst te lang");
         if self.kind=="license" { ensure!(self.owner_id.is_some(),"Selecteer een gebruiker"); }
         ensure!(self.installations.len()<=100,"Maximaal 100 installaties per licentie");
         for i in &self.installations { ensure!(["Windows","Linux","macOS"].contains(&i.platform.as_str()) && i.device.encode_utf16().count()<=200,"Ongeldig platform of apparaatnaam te lang"); }
+        if self.kind=="recovery" {self.recovery.as_ref().ok_or_else(||anyhow::anyhow!("Herstelgegevens ontbreken"))?.validate(self.deleted)?;}
+        else {ensure!(self.recovery.is_none(),"Herstelgegevens horen bij een herstelsleutel");}
         Ok(())
     }
 }
@@ -55,14 +58,15 @@ impl LocalState {
         for (id,rev) in &self.pending {ensure!(*rev>=0 && ids.contains(id),"Ongeldige synchronisatiegegevens");}
         for (id,e) in &self.conflicts {e.validate()?;ensure!(*id==e.id && self.pending.contains_key(id),"Ongeldig conflict");}
         for e in self.entries.iter().filter(|e|e.kind=="license"&&!e.deleted) {ensure!(self.entries.iter().any(|p|Some(p.id)==e.owner_id&&p.kind=="person"),"Licentie zonder gebruiker");}
+        crate::recovery::validate_total(&self.entries)?;
         Ok(())
     }
     pub fn edit(&mut self,mut e:Entry)->Result<()> {
         e.validate()?;
         let revision=self.entries.iter().find(|x|x.id==e.id).map_or(0,|x|x.revision);
-        self.pending.entry(e.id).or_insert(revision);
+
         e.revision=revision;e.mutation_id=Uuid::new_v4();
-        self.entries.retain(|x|x.id!=e.id);self.entries.push(e);Ok(())
+        let mut entries=self.entries.clone();entries.retain(|x|x.id!=e.id);let id=e.id;entries.push(e);crate::recovery::validate_total(&entries)?;self.pending.entry(id).or_insert(revision);self.entries=entries;Ok(())
     }
     pub fn request(&self)->Result<SyncRequest> {
         let vault_id=self.vault_id.ok_or_else(||anyhow::anyhow!("Geen server gekoppeld"))?;

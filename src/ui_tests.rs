@@ -5,7 +5,7 @@ use winapi::shared::windef::{HWND, POINT, RECT};
 use winapi::um::winuser::*;
 use winapi::um::wingdi::*;
 
-unsafe fn paint_now(window: &nwg::Window) {
+pub(super) unsafe fn paint_now(window: &nwg::Window) {
     let hwnd = window.handle.hwnd().unwrap();
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
     RedrawWindow(hwnd, ptr::null(), ptr::null_mut(),
@@ -20,7 +20,7 @@ unsafe fn paint_now(window: &nwg::Window) {
     }
 }
 
-unsafe fn reachable(handle: &nwg::ControlHandle) {
+pub(super) unsafe fn reachable(handle: &nwg::ControlHandle) {
     let hwnd = handle.hwnd().unwrap();
     assert_ne!(IsWindowVisible(hwnd), 0, "Control must be visible");
     let parent = GetParent(hwnd);
@@ -34,7 +34,7 @@ unsafe fn reachable(handle: &nwg::ControlHandle) {
     assert_eq!(hit, hwnd, "Control {:?} at ({},{}) outside/covered; parent client {}x{}",String::from_utf16_lossy(&caption[..len as usize]),point.x,point.y,parent_rect.right,parent_rect.bottom);
 }
 
-unsafe fn snapshot(hwnd: HWND, path: &std::path::Path, dark: bool) {
+pub(super) unsafe fn snapshot(hwnd: HWND, path: &std::path::Path, dark: bool) {
     let mut rect: RECT = mem::zeroed(); GetWindowRect(hwnd, &mut rect);
     let width = rect.right-rect.left; let height = rect.bottom-rect.top;
     let screen = GetDC(hwnd); let dc = CreateCompatibleDC(screen);
@@ -129,6 +129,7 @@ fn native_windows_show_text_and_unobstructed_controls() {
     app.state.borrow_mut().as_mut().unwrap().entries.iter_mut().find(|e|e.id==person.id).unwrap().deleted=false;app.refresh();app.fill(Some(license.id));
     unsafe{paint_now(&app.window);snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("09-filled-light.bmp"),false);}
     app.set_theme(true).unwrap();unsafe{paint_now(&app.window);snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("10-filled-dark.bmp"),true);}
+    recovery_ui::verify_recovery_ui(&app);
     app.fields[BACKUPPW].set_text("temporary-backup-password");app.action(LOCK).unwrap();assert!(app.fields[BACKUPPW].text().is_empty());assert!(app.fields[CODE].text().is_empty());
     assert!(!temp.path().join("never-created.lkv").exists());
 }

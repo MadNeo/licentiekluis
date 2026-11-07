@@ -1,6 +1,10 @@
 # LicentieKluis
 
-Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Dit pakket bevat de broncode voor Windows 0.9.3 en web/server 0.8.0.
+Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Dit pakket bevat de broncode voor Windows 1.0.0 en web/server 0.9.0.
+
+## Herstelsleutels
+
+Bewaar herstelcodes van authenticators en crypto-wallets met handmatige tekst, een tekstbestand en/of een foto. Eén invoervorm is voldoende. Beschikbaar in Windows en het webportaal, met versleutelde opslag, synchronisatie en back-ups. Zie [de handleiding Herstelsleutels](docs/HERSTELSLEUTELS.md).
 
 ## Server installeren in Proxmox-LXC
 
