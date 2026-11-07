@@ -60,7 +60,7 @@ fn request_error(error: reqwest::Error) -> anyhow::Error {
     let error = anyhow::Error::new(error);
     let detail = format!("{error:#}");
     if ["-2146762487", "-2146762486"].iter().any(|code| detail.contains(code)) {
-        return anyhow::anyhow!("Server-CA niet vertrouwd. Kies bij Verbinding & back-up het CA-certificaat van je eigen server.");
+        return anyhow::anyhow!("Server-CA niet vertrouwd. Kies bij Instellingen het CA-certificaat van je eigen server.");
     }
     if detail.contains("-2146762481") {
         return anyhow::anyhow!("Het serveradres komt niet overeen met het certificaat. Gebruik het HTTPS-adres dat bij de installatie is ingesteld.");

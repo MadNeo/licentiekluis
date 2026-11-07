@@ -14,6 +14,7 @@ const SETTINGS:usize=19;
 const IMPORT_CA:usize=20;
 const REMOVE_CA:usize=21;
 const TLS_CHECK:usize=22;
+const SERVER_SETTINGS:usize=23;
 const UNLOCK:usize=0;const NEW:usize=1;const SAVE:usize=2;const DELETE:usize=3;const COPY:usize=4;const SHOW:usize=5;const ADDPERSON:usize=6;const RENAME:usize=7;const DELPERSON:usize=8;const ADDINSTALL:usize=9;const DELINSTALL:usize=10;const LOGIN:usize=11;const SYNC:usize=12;const LOGOUT:usize=13;const CONFLICT:usize=14;const BACKUP:usize=15;const RESTORE:usize=16;const LOCK:usize=17;
 type WorkResult=(u64,LocalState,std::result::Result<(LocalState,Session),String>);
 
@@ -52,7 +53,7 @@ impl App {
         let mut strong=nwg::Font::default();nwg::Font::builder().family("Segoe UI").size(15).weight(600).build(&mut strong)?;
         let mut mono=nwg::Font::default();nwg::Font::builder().family("Consolas").size(15).build(&mut mono)?;
         let mut window=nwg::Window::default();nwg::Window::builder().size((1180,780)).position((30,20)).title(concat!("LicentieKluis ",env!("CARGO_PKG_VERSION"))).flags(nwg::WindowFlags::WINDOW|nwg::WindowFlags::VISIBLE|nwg::WindowFlags::MINIMIZE_BOX).build(&mut window)?;
-        let mut settings_window=nwg::Window::default();nwg::Window::builder().size((720,620)).position((180,90)).title("Verbinding & back-up · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut settings_window)?;
+        let mut settings_window=nwg::Window::default();nwg::Window::builder().size((720,620)).position((180,90)).title("Instellingen · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut settings_window)?;
         let mut mail_window=nwg::Window::default();nwg::Window::builder().size((920,680)).position((100,50)).title("Licenties delen · LicentieKluis").parent(Some(&window)).flags(nwg::WindowFlags::WINDOW).build(&mut mail_window)?;
         let mut labels=vec![];
         let mut decorations:Vec<(nwg::ControlHandle,render::Panel)>=vec![];
@@ -94,12 +95,12 @@ impl App {
         }
         label(&window,"",20,738,1140,34,mint,&small)?;
         label(&settings_window,"",0,0,720,620,bg,&small)?;
-        label(&settings_window,"Verbinding & back-up",24,18,664,36,bg,&title)?;
+        label(&settings_window,"Instellingen",24,18,440,36,bg,&title)?;
         label(&settings_window,"Automatische sync elke 30 seconden. Zonder server werk je lokaal.",24,59,664,24,bg,&small)?;
         label(&settings_window,"",20,98,680,328,white,&small)?;
         label(&settings_window,"Serververbinding",36,112,640,26,white,&heading)?;
         for (text,x,y,w) in [("HTTPS-serveradres",36,149,648),("Serveraccount",36,215,252),("Serverwachtwoord",304,215,236)] {label(&settings_window,text,x,y,w,22,white,&small)?;}
-        label(&settings_window,"Lokale Caddy-CA · alleen voor dit serveradres",36,396,648,21,white,&small)?;
+        label(&settings_window,"CA geldt alleen voor dit adres · E-mail instellen opent je browser",36,396,648,21,white,&small)?;
         label(&settings_window,"",20,442,680,150,white,&small)?;
         label(&settings_window,"Back-up & herstel",36,456,648,26,white,&heading)?;
         label(&settings_window,"Wachtwoord van de back-up (alleen bij herstellen)",36,494,420,22,white,&small)?;
@@ -118,12 +119,13 @@ impl App {
             ("Synchroniseren",36,283,184), ("Afmelden",232,283,132),
             ("Conflicten",376,283,132), ("Back-up maken",382,518,146),
             ("Herstellen",540,518,144), ("Vergrendelen",1018,128,126),
-            ("Licenties delen",248,674,328), ("Verbinding & back-up",920,25,224),
+            ("Licenties delen",248,674,328), ("Instellingen",920,25,224),
             ("CA-certificaat kiezen",36,363,224), ("CA-certificaat wissen",274,363,224),
             ("Certificaatcontrole instellen",36,319,648),
+            ("E-mail instellen",520,283,164),
         ];
         let mut buttons=vec![];
-        for (i,(text,x,y,w)) in specifications.into_iter().enumerate(){let mut b=nwg::Button::default();let parent=if [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE,IMPORT_CA,REMOVE_CA,TLS_CHECK].contains(&i){&settings_window}else{&window};nwg::Button::builder().text(text).parent(parent).position((x,y)).size((w,30)).font(Some(&strong)).build(&mut b)?;buttons.push(b);}
+        for (i,(text,x,y,w)) in specifications.into_iter().enumerate(){let mut b=nwg::Button::default();let parent=if [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE,IMPORT_CA,REMOVE_CA,TLS_CHECK,SERVER_SETTINGS].contains(&i){&settings_window}else{&window};nwg::Button::builder().text(text).parent(parent).position((x,y)).size((w,30)).font(Some(&strong)).build(&mut b)?;buttons.push(b);}
         let mut people=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((36,258)).size((166,256)).build(&mut people)?;
         let mut licenses=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((248,373)).size((328,285)).build(&mut licenses)?;
         let mut owner=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((888,262)).size((254,200)).build(&mut owner)?;
@@ -149,11 +151,11 @@ impl App {
         let mut mail_to=nwg::TextInput::default();nwg::TextInput::builder().parent(&mail_window).position((382,144)).size((502,28)).placeholder_text(Some("naam@voorbeeld.nl")).build(&mut mail_to)?;
         let mut mail_subject=nwg::TextInput::default();nwg::TextInput::builder().parent(&mail_window).position((382,216)).size((502,28)).text("Softwarelicenties").build(&mut mail_subject)?;
         let mut mail_preview=nwg::TextBox::default();nwg::TextBox::builder().parent(&mail_window).position((382,288)).size((502,276)).readonly(true).flags(nwg::TextBoxFlags::VISIBLE|nwg::TextBoxFlags::TAB_STOP|nwg::TextBoxFlags::VSCROLL|nwg::TextBoxFlags::AUTOVSCROLL).build(&mut mail_preview)?;
-        let mut mail_buttons=vec![];for (text,x,y,w) in [("Voorbeeld maken",20,604,160),("Via server versturen",192,604,184),("Open mailprogramma",388,604,200),("Sluiten",764,604,136),("Alles selecteren",36,538,144),("Selectie wissen",190,538,144)]{let mut b=nwg::Button::default();nwg::Button::builder().parent(&mail_window).position((x,y)).size((w,32)).text(text).font(Some(&strong)).build(&mut b)?;mail_buttons.push(b);}
+        let mut mail_buttons=vec![];for (text,x,y,w) in [("Voorbeeld maken",20,604,160),("Via server versturen",192,604,184),("Open mailprogramma",388,604,200),("Sluiten",764,604,136),("Alles selecteren",36,538,144),("Selectie wissen",190,538,144),("E-mail instellen",602,604,146)]{let mut b=nwg::Button::default();nwg::Button::builder().parent(&mail_window).position((x,y)).size((w,32)).text(text).font(Some(&strong)).build(&mut b)?;mail_buttons.push(b);}
         drop(label);
         let theme_path=path.parent().unwrap().join("appearance.txt");let theme=Rc::new(theme::Theme::new(&theme_path));
         let body_children=theme::body_children(&window);
-        let mut theme_button=nwg::Button::default();nwg::Button::builder().parent(&window).position((710,25)).size((194,30)).text(if theme.dark.get(){"Lichte modus"}else{"Donkere modus"}).build(&mut theme_button)?;
+        let mut theme_button=nwg::Button::default();nwg::Button::builder().parent(&settings_window).position((490,22)).size((194,30)).text(if theme.dark.get(){"Lichte modus"}else{"Donkere modus"}).build(&mut theme_button)?;
         let mut tabs=nwg::TabsContainer::default();nwg::TabsContainer::builder().parent(&window).position((480,22)).size((214,34)).build(&mut tabs)?;
         let mut tab_main=nwg::Tab::default();nwg::Tab::builder().parent(&tabs).text("Kluis").build(&mut tab_main)?;
         let mut tab_changes=nwg::Tab::default();nwg::Tab::builder().parent(&tabs).text("Changelog").build(&mut tab_changes)?;
@@ -220,6 +222,7 @@ impl App {
             IMPORT_CA => self.update_server_ca(true)?,
             REMOVE_CA => self.update_server_ca(false)?,
             TLS_CHECK => self.toggle_certificate_verification()?,
+            SERVER_SETTINGS => self.open_server_settings()?,
             LOGOUT=>{database::forget(&self.path)?;*self.connection.borrow_mut()=None;self.epoch.set(self.epoch.get()+1);if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.status.set_text("Afgemeld. Lokaal werken blijft beschikbaar.");},
             CONFLICT=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.resolve()?;},BACKUP=>self.backup(false)?,RESTORE=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.backup(true)?;},
             LOCK=>{if self.discard(){self.epoch.set(self.epoch.get()+1);*self.connection.borrow_mut()=None;self.clear_clipboard();self.fields[CODE].set_text("");self.fields[SERVERPW].set_text("");self.fields[BACKUPPW].set_text("");*self.state.borrow_mut()=None;*self.password.borrow_mut()=None;if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.fill(None);self.people.clear();self.licenses.clear();self.license_count.set_text("Ontgrendel de kluis om licenties te bekijken");self.owner.set_collection(vec![]);self.fields[PERSON].set_text("");self.status.set_text("Vergrendeld");}},_=>{}
@@ -290,6 +293,13 @@ impl App {
     fn save_license(&self)->Result<()>{ensure!(self.fields[DEVICE].text().trim().is_empty(),"Klik eerst op Voeg toe om het ingevoerde apparaat toe te voegen, of maak het apparaatveld leeg");let mut s=self.snapshot()?;let mut e=self.selected.get().and_then(|id|s.entries.iter().find(|e|e.id==id).cloned()).unwrap_or_else(||Entry::new("license",""));e.name=self.fields[NAME].text().trim().into();e.code=self.fields[CODE].text();e.software_version=self.fields[VERSION].text();e.owner_id=self.owner.selection().and_then(|i|self.people_ids.borrow().get(i).copied()).or(e.owner_id);let expiry=self.fields[EXPIRY].text();e.expires=if expiry.trim().is_empty(){None}else{Some(chrono::NaiveDate::parse_from_str(expiry.trim(),"%Y-%m-%d").context("Gebruik jjjj-mm-dd")?)};e.notes=self.notes.text();e.installations=self.draft_installs.borrow().clone();let id=e.id;s.edit(e)?;self.selected.set(Some(id));self.commit(s)}
     fn delete_license(&self)->Result<()>{let mut s=self.snapshot()?;let id=self.selected.get().context("Selecteer een licentie")?;if !self.confirm("Deze licentie verwijderen, ook op de server na synchronisatie?"){return Ok(());}let mut e=s.entries.iter().find(|e|e.id==id).context("Record ontbreekt")?.clone();e.deleted=true;s.edit(e)?;self.selected.set(None);self.commit(s)}
     fn edit_person(&self,action:usize)->Result<()>{let mut s=self.snapshot()?;let id=self.people.selection().filter(|i|*i>0).and_then(|i|self.people_ids.borrow().get(i-1).copied());let mut p=if action==ADDPERSON{Entry::new("person","")}else{s.entries.iter().find(|e|Some(e.id)==id).context("Selecteer eerst een gebruiker")?.clone()};if action==DELPERSON{ensure!(!s.entries.iter().any(|e|e.kind=="license"&&!e.deleted&&e.owner_id==Some(p.id)),"Verplaats of verwijder eerst de licenties van deze gebruiker");if !self.confirm("Gebruiker verwijderen?"){return Ok(());}p.deleted=true;}else{p.name=self.fields[PERSON].text().trim().into();ensure!(!s.entries.iter().any(|e|e.kind=="person"&&!e.deleted&&e.id!=p.id&&e.name.to_lowercase()==p.name.to_lowercase()),"Deze gebruiker bestaat al");}s.edit(p)?;self.commit(s)}
+    fn open_server_settings(&self) -> Result<()> {
+        let url = sync::server_url(&self.fields[URL].text()).context("Vul bij Instellingen eerst je HTTPS-serveradres in")?;
+        open::that(format!("{url}settings#emailSettings"))
+            .context("De serverinstellingen konden niet in de browser worden geopend")?;
+        Ok(())
+    }
+
     fn refresh_tls_button(&self) {
         let label = match self.connection.borrow().as_ref() {
             Some(config) if !sync::certificate_verification(&config.url, config.verify_certificate) =>
@@ -439,6 +449,7 @@ impl App {
         if event==nwg::Event::OnListBoxSelect||(event==nwg::Event::OnTextInput&&(handle==self.mail_to.handle||handle==self.mail_subject.handle)){*self.mail_draft.borrow_mut()=None;self.mail_preview.set_text("");}
         if event!=nwg::Event::OnButtonClick{return;}let Some(i)=self.mail_buttons.iter().position(|b|b.handle==handle)else{return;};
         let result=(||->Result<()>{match i{
+            6=>self.open_server_settings()?,
             0=>{let entries=self.mail_entries.borrow();let chosen:Vec<_>=self.mail_licenses.multi_selection().iter().map(|i|entries[*i].clone()).collect();let draft=mail::compose(&self.mail_to.text(),&self.mail_subject.text(),&chosen)?;self.mail_preview.set_text(&format!("Aan: {}\r\nOnderwerp: {}\r\n\r\n{}",draft.request.recipient,draft.request.subject,draft.body));*self.mail_draft.borrow_mut()=Some(draft);},
             1=>self.send_mail()?,
             2=>{let draft=self.mail_draft.borrow().clone().context("Maak eerst een voorbeeld en controleer de ontvanger")?;let url=mail::mailto(&draft)?;open::that(url).context("Geen mailprogramma geopend; configureer de standaard mail-app")?;nwg::modal_info_message(&self.mail_window,"E-mail geopend","De e-mail is geopend in je eigen mailprogramma. Controleer de inhoud en klik daar op Verzenden. LicentieKluis kan de verzending niet controleren.");},

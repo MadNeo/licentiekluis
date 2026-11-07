@@ -26,6 +26,7 @@ if (args.Contains("--init") || args.Contains("--init-stdin"))
 }
 var config = JsonSerializer.Deserialize<Config>(File.ReadAllText(configPath)) ?? throw new InvalidDataException("Configuratie ontbreekt.");
 var smtpPath = Path.Combine(dataDir, "smtp.lkv");
+var mailConfiguration = new MailConfiguration(smtpPath, config.Key);
 if (args.Contains("--configure-mail"))
 {
     Console.WriteLine("SMTP met STARTTLS (gewoonlijk poort 587). Poort 465 en OAuth zijn niet ondersteund.");
@@ -74,6 +75,8 @@ app.Use(async (ctx, next) =>
 app.UseRateLimiter();
 var webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 app.MapGet("/", () => Results.File(Path.Combine(webRoot, "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/settings", () => Results.File(Path.Combine(webRoot, "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/settings.js", () => Results.File(Path.Combine(webRoot, "settings.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/theme.js", () => Results.File(Path.Combine(webRoot, "theme.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/changelog.js", () => Results.File(Path.Combine(webRoot, "changelog.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/changelog", () => Results.File(Path.Combine(webRoot, "changelog.html"), "text/html; charset=utf-8"));
@@ -83,14 +86,76 @@ app.MapGet("/manage.js", () => Results.File(Path.Combine(webRoot, "manage.js"), 
 app.MapGet("/app.js", () => Results.File(Path.Combine(webRoot, "app.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/mail.js", () => Results.File(Path.Combine(webRoot, "mail.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/app.css", () => Results.File(Path.Combine(webRoot, "app.css"), "text/css; charset=utf-8"));
-app.MapGet("/health", () => Results.Ok(new { status = "ok", version = "0.7.2" }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok", version = "0.8.0" }));
 app.MapGet("/api/mail/status", () => Results.Ok(new { configured = File.Exists(smtpPath) }));
+app.MapGet("/api/settings", async () =>
+{
+    await mailGate.WaitAsync();
+    try { return Results.Ok(new { version = "0.8.0", account = config.Username, mail = mailConfiguration.View() }); }
+    catch (Exception e) when (e is IOException or CryptographicException or JsonException)
+    { return Results.Json(new { error = "Mailinstellingen konden niet worden gelezen. Controleer de serveropslag." }, statusCode: 503); }
+    finally { mailGate.Release(); }
+});
+app.MapPut("/api/settings/mail", async (MailSettingsUpdate update) =>
+{
+    await mailGate.WaitAsync();
+    try { return Results.Ok(mailConfiguration.Save(update)); }
+    catch (SettingsChangedException) { return Results.Conflict(new { error = "De instellingen zijn elders gewijzigd. Herlaad ze voordat je opnieuw opslaat." }); }
+    catch (ArgumentException e) { return Results.BadRequest(new { error = e.Message }); }
+    catch (Exception e) when (e is IOException or CryptographicException or JsonException or UnauthorizedAccessException)
+    { return Results.Json(new { error = "Opslaan niet bevestigd. Herlaad de instellingen en controleer de serveropslag." }, statusCode: 503); }
+    finally { mailGate.Release(); }
+});
+app.MapPost("/api/settings/mail/test", async (MailTestRequest request) =>
+{
+    await mailGate.WaitAsync();
+    try
+    {
+        if (request.RequestId == Guid.Empty) throw new ArgumentException("Ongeldig verzoeknummer.");
+        var recipient = LicenseMail.Address(request.Recipient ?? "");
+        var fingerprint = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { kind = "settings-test", request })));
+        if (mailLog.TryGetValue(request.RequestId, out var prior))
+        {
+            if (prior.Fingerprint != fingerprint) return Results.Conflict(new { error = "Dit verzoeknummer hoort bij een andere mail." });
+            return Results.Ok(new MailOutcome(prior.Status == "submitted" ? "submitted" : "unknown",
+                prior.Status == "submitted" ? "Deze testmail is al aangeboden; niet opnieuw verzonden." : "Eerdere test niet bevestigd. Controleer eerst of de testmail is ontvangen."));
+        }
+        mailConfiguration.RequireRevision(request.Revision);
+        var settings = mailConfiguration.Load();
+        if (settings is null) return Results.Json(new { error = "Sla eerst de mailinstellingen op." }, statusCode: 503);
+        using var message = new MailMessage(settings.From, recipient)
+        { Subject = "LicentieKluis · Testmail", Body = "De e-mailinstellingen van LicentieKluis zijn getest. Deze testmail bevat geen licenties of wachtwoorden.", BodyEncoding = Encoding.UTF8, SubjectEncoding = Encoding.UTF8 };
+        using var smtp = new SmtpClient(settings.Host, settings.Port) { EnableSsl = true, UseDefaultCredentials = false, DeliveryMethod = SmtpDeliveryMethod.Network };
+        if (settings.Username.Length > 0) smtp.Credentials = new NetworkCredential(settings.Username, settings.Password);
+        mailLog[request.RequestId] = new MailAttempt(fingerprint, "sending", DateTimeOffset.UtcNow);
+        EncryptedFile.Save(mailLogPath, mailLog, config.Key);
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await smtp.SendMailAsync(message, timeout.Token);
+            mailLog[request.RequestId] = mailLog[request.RequestId] with { Status = "submitted" };
+            EncryptedFile.Save(mailLogPath, mailLog, config.Key);
+            return Results.Ok(new MailOutcome("submitted", "Testmail aangeboden aan de mailserver. Controleer je inbox en ongewenste e-mail."));
+        }
+        catch (Exception e) when (e is SmtpException or OperationCanceledException or IOException)
+        {
+            mailLog[request.RequestId] = mailLog[request.RequestId] with { Status = "unknown" };
+            EncryptedFile.Save(mailLogPath, mailLog, config.Key);
+            return Results.Ok(new MailOutcome("unknown", "Testmail niet bevestigd. Controleer host, STARTTLS-poort, afzender en aanmelding. Controleer ook je inbox voordat je opnieuw test."));
+        }
+    }
+    catch (SettingsChangedException) { return Results.Conflict(new { error = "De instellingen zijn gewijzigd. Herlaad ze voordat je test." }); }
+    catch (ArgumentException e) { return Results.BadRequest(new { error = e.Message }); }
+    catch (Exception e) when (e is IOException or CryptographicException or JsonException)
+    { return Results.Json(new { error = "De test kon niet worden bevestigd. Controleer de serveropslag en je inbox voordat je opnieuw test." }, statusCode: 503); }
+    finally { mailGate.Release(); }
+}).RequireRateLimiting("mail");
 app.MapPost("/api/mail/send", async (LicenseMailRequest request) =>
 {
     await mailGate.WaitAsync();
     try
     {
-        if (!File.Exists(smtpPath)) return Results.Json(new { error = "SMTP is nog niet ingesteld. Voer configure-mail.sh uit op de server." }, statusCode: 503);
+        if (!File.Exists(smtpPath)) return Results.Json(new { error = "E-mail is nog niet ingesteld. Open Instellingen → E-mail in het webportaal." }, statusCode: 503);
         var fingerprint = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(request)));
         if (mailLog.TryGetValue(request.RequestId, out var prior))
         {
@@ -101,7 +166,7 @@ app.MapPost("/api/mail/send", async (LicenseMailRequest request) =>
         await gate.WaitAsync();
         try { selected = LicenseMail.Select(request, state.Entries); }
         finally { gate.Release(); }
-        var settings = EncryptedFile.Load<SmtpSettingsStore>(smtpPath, config.Key).ToSettings();
+        var settings = mailConfiguration.Load()!;
         using var message = new MailMessage(LicenseMail.Address(settings.From), LicenseMail.Address(request.Recipient))
         { Subject = request.Subject.Trim(), Body = LicenseMail.Body(selected), BodyEncoding = Encoding.UTF8, SubjectEncoding = Encoding.UTF8, IsBodyHtml = false };
         using var smtp = new SmtpClient(settings.Host, settings.Port) { EnableSsl = true, UseDefaultCredentials = false, DeliveryMethod = SmtpDeliveryMethod.Network };

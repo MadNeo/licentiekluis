@@ -86,7 +86,8 @@ fn native_windows_show_text_and_unobstructed_controls() {
         snapshot(app.window.handle.hwnd().unwrap(), &screenshots.join("01-main.bmp"),false);
         paint_now(&app.settings_window);
         for field in &app.fields[URL..] { reachable(&field.handle); }
-        for index in [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE,IMPORT_CA,REMOVE_CA,TLS_CHECK] { reachable(&app.buttons[index].handle); }
+        for index in [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE,IMPORT_CA,REMOVE_CA,TLS_CHECK,SERVER_SETTINGS] { reachable(&app.buttons[index].handle); }
+        reachable(&app.theme_button.handle);
         snapshot(app.settings_window.handle.hwnd().unwrap(), &screenshots.join("02-settings.bmp"),false);
         app.event(nwg::Event::OnButtonClick,app.theme_button.handle.clone());
         assert!(app.theme.dark.get());assert!(theme::Theme::new(&app.theme_path).dark.get());

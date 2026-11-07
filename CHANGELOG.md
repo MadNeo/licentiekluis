@@ -1,5 +1,14 @@
 # LicentieKluis — wijzigingen
 
+## Web 0.8.0 en Windows 0.9.3
+
+- Aparte pagina Instellingen met e-mail, weergave, back-up/herstel en serverinformatie.
+- Mailserver instellen en een testmail versturen vanuit het webportaal; geen configuratiescript of herstart nodig.
+- Bestaande mailinstellingen worden overgenomen. SMTP-wachtwoorden blijven versleuteld en worden nooit teruggestuurd naar de browser.
+- Controle op gelijktijdige wijzigingen en herhaalde testmailverzoeken.
+- Windows heeft een centrale knop Instellingen met weergavekeuze en een link naar de mailinstellingen van de server.
+- De tijdelijke lokale modus zonder certificaatcontrole blijft beschikbaar.
+
 ## Windows 0.9.2
 
 - Tijdelijk synchroniseren via HTTPS zonder certificaatcontrole voor lokale IP-adressen en localhost.
