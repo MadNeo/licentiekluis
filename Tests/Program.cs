@@ -69,6 +69,25 @@ RejectMail(mr, [ma with { Revision = 2 },mb], "mail rejects stale preview");
 RejectMail(mr, [ma with { Deleted = true },mb], "mail rejects deleted license");
 RejectMail(mr, [ma with { Code = "" },mb], "mail rejects missing code");
 RejectMail(mr with { Licenses = [] }, [ma,mb], "mail rejects empty selection");
+var photo = new RecoveryPhoto("recovery.png", "image/png", Convert.ToBase64String(File.ReadAllBytes("fixtures/recovery-test.png")));
+var forms = new[] {
+    new RecoveryData { Text = "SYNTHETIC MANUAL" },
+    new RecoveryData { Category = "wallet", TextFile = new("recovery.txt", "SYNTHETIC FILE") },
+    new RecoveryData { Photo = photo },
+    new RecoveryData { Text = "SYNTHETIC MANUAL", TextFile = new("recovery.txt", "SYNTHETIC FILE"), Photo = photo }
+};
+foreach (var r in forms) { SyncEngine.Validate(new Entry { Kind="recovery", Name="Synthetic", Recovery=r }); Check(true, "recovery input combination accepted"); }
+foreach (var bad in new[] {new RecoveryData(), new RecoveryData { TextFile = new("bad.txt", "") }, new RecoveryData { TextFile = new("../bad.txt", "data") }, new RecoveryData { Photo = photo with { Data = Convert.ToBase64String("<svg>"u8.ToArray()) } }, new RecoveryData { TextFile = new("big.txt", new string('x',65537)) }, new RecoveryData { Category = "invalid", Text="x" }}) {
+    try { bad.Validate(); Check(false, "bad recovery accepted"); } catch(ArgumentException) { Check(true, "invalid recovery rejected"); }
+}
+var recoveryEntry=new Entry {Kind="recovery",Name="Recovery test",Recovery=forms[3]};
+RejectMail(mr with {Licenses=[new(recoveryEntry.Id,0)]},[recoveryEntry],"recovery entries cannot be emailed");
+var recoveryServer=new ServerState();var recoverySync=SyncEngine.Apply(recoveryServer,new(recoveryServer.VaultId,[new(recoveryEntry,0)]));
+Check(recoverySync.State.Entries[0].Recovery==forms[3],"recovery sync retains all attachments");
+var recoveryCipher=EncryptedFile.Encrypt(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new LocalState {Entries=[recoveryEntry]}),password);
+var recovered=System.Text.Json.JsonSerializer.Deserialize<LocalState>(EncryptedFile.Decrypt(recoveryCipher,password))!;
+Check(recovered.Entries[0].Recovery==forms[3],"recovery encrypted backup roundtrip");
+
 Console.WriteLine($"{checks} checks passed.");
 if (args.Contains("--fixture"))
 {

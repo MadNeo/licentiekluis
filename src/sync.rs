@@ -80,7 +80,7 @@ pub fn login(url: &str, user: &str, password: &str, server_ca: Option<&[u8]>, ve
 }
 pub fn synchronize(state:&mut LocalState,session:&Session)->Result<()> {
     ensure!(state.conflicts.is_empty(),"Los eerst de conflicten op");let mut next=state.clone();next.bind(session.url.clone(),session.vault_id)?;
-    let r=client(&session.url, session.server_ca.as_deref(), session.verify_certificate, 15)?.post(format!("{}api/sync",session.url)).bearer_auth(&session.token).json(&next.request()?).send().map_err(request_error)?;
+    let r=client(&session.url, session.server_ca.as_deref(), session.verify_certificate, 15)?.post(format!("{}api/sync",session.url)).bearer_auth(&session.token).header("X-LicentieKluis-Protocol","2").json(&next.request()?).send().map_err(request_error)?;
     ensure!(r.status().is_success(),"Synchronisatie mislukt (HTTP {}). Bij 401 opnieuw aanmelden",r.status());let response:SyncResponse=r.json()?;next.merge(response)?;*state=next;Ok(())
 }
 pub fn logout(session:&Session){if let Ok(c)=client(&session.url, session.server_ca.as_deref(), session.verify_certificate, 15){let _=c.post(format!("{}api/logout",session.url)).bearer_auth(&session.token).send();}}

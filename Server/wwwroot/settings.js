@@ -20,19 +20,21 @@ function settingsLock(){
 function settingsRoute(){
  if(!token)return;
  const active=location.pathname==='/settings';
- $('dashboard').hidden=active;$('settingsPanel').hidden=!active;
+ const recovery=location.pathname==='/recovery';
+ $('dashboard').hidden=active||recovery;if($('recoveryPanel'))$('recoveryPanel').hidden=!recovery;
+ if($('recoveryOpen'))$('recoveryOpen').setAttribute('aria-current',recovery?'page':'false');$('settingsPanel').hidden=!active;
  $('settingsOpen').setAttribute('aria-current',active?'page':'false');
- $('vaultOpen').setAttribute('aria-current',active?'false':'page');
- document.title=active?'LicentieKluis · Instellingen':'LicentieKluis · Jouw licentieoverzicht';
+ $('vaultOpen').setAttribute('aria-current',active||recovery?'false':'page');
+ document.title=active?'LicentieKluis · Instellingen':recovery?'LicentieKluis · Herstelsleutels':'LicentieKluis · Jouw licentieoverzicht';
  if(active&&!settingsValue&&!settingsBusy)loadSettings();
 }
 function settingsLogin(){
- $('settingsOpen').hidden=false;$('vaultOpen').hidden=false;settingsRoute();
+ if($('recoveryOpen'))$('recoveryOpen').hidden=false;$('settingsOpen').hidden=false;$('vaultOpen').hidden=false;settingsRoute();
 }
 function navigateSettings(path){
  if(settingsBusy){message('Wacht tot de huidige instelling is opgeslagen of getest.');return;}
- if(location.pathname==='/settings'&&settingsDirty&&path==='/'&&!confirm('Niet-opgeslagen mailinstellingen verwerpen?'))return;
- if(path==='/'){settingsDirty=false;settingsValue=null;$('smtpPassword').value='';}
+ if(location.pathname==='/settings'&&settingsDirty&&!path.startsWith('/settings')&&!confirm('Niet-opgeslagen mailinstellingen verwerpen?'))return;
+ if(!path.startsWith('/settings')){settingsDirty=false;settingsValue=null;$('smtpPassword').value='';}
  history.pushState(null,'',path);message();settingsRoute();
  if(path.startsWith('/settings'))$('settingsTitle').focus();
  window.scrollTo(0,0);

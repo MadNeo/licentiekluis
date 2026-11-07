@@ -62,7 +62,7 @@ app.Use(async (ctx, next) =>
 {
     ctx.Response.Headers.CacheControl = "no-store";
     ctx.Response.Headers.XContentTypeOptions = "nosniff";
-    ctx.Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+    ctx.Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
     ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
     if (ctx.Request.Path.StartsWithSegments("/api") && ctx.Request.Path != "/api/login")
     {
@@ -75,6 +75,8 @@ app.Use(async (ctx, next) =>
 app.UseRateLimiter();
 var webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 app.MapGet("/", () => Results.File(Path.Combine(webRoot, "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/recovery", () => Results.File(Path.Combine(webRoot, "index.html"), "text/html; charset=utf-8"));
+app.MapGet("/recovery.js", () => Results.File(Path.Combine(webRoot, "recovery.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/settings", () => Results.File(Path.Combine(webRoot, "index.html"), "text/html; charset=utf-8"));
 app.MapGet("/settings.js", () => Results.File(Path.Combine(webRoot, "settings.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/theme.js", () => Results.File(Path.Combine(webRoot, "theme.js"), "text/javascript; charset=utf-8"));
@@ -86,12 +88,12 @@ app.MapGet("/manage.js", () => Results.File(Path.Combine(webRoot, "manage.js"), 
 app.MapGet("/app.js", () => Results.File(Path.Combine(webRoot, "app.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/mail.js", () => Results.File(Path.Combine(webRoot, "mail.js"), "text/javascript; charset=utf-8"));
 app.MapGet("/app.css", () => Results.File(Path.Combine(webRoot, "app.css"), "text/css; charset=utf-8"));
-app.MapGet("/health", () => Results.Ok(new { status = "ok", version = "0.8.0" }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok", version = "0.9.0" }));
 app.MapGet("/api/mail/status", () => Results.Ok(new { configured = File.Exists(smtpPath) }));
 app.MapGet("/api/settings", async () =>
 {
     await mailGate.WaitAsync();
-    try { return Results.Ok(new { version = "0.8.0", account = config.Username, mail = mailConfiguration.View() }); }
+    try { return Results.Ok(new { version = "0.9.0", account = config.Username, mail = mailConfiguration.View() }); }
     catch (Exception e) when (e is IOException or CryptographicException or JsonException)
     { return Results.Json(new { error = "Mailinstellingen konden niet worden gelezen. Controleer de serveropslag." }, statusCode: 503); }
     finally { mailGate.Release(); }
@@ -194,7 +196,7 @@ app.MapPost("/api/mail/send", async (LicenseMailRequest request) =>
 app.MapGet("/api/entries", async () =>
 {
     await gate.WaitAsync();
-    try { return Results.Ok(state.Entries.Where(e => !e.Deleted).Select(e => e with { Code = "" }).ToList()); }
+    try { return Results.Ok(state.Entries.Where(e => !e.Deleted).Select(e => e with { Code = "", Recovery = null }).ToList()); }
     finally { gate.Release(); }
 });
 app.MapGet("/api/licenses/{id:guid}/code", async (Guid id) =>
@@ -221,11 +223,13 @@ app.MapPost("/api/login", (LoginRequest login) =>
     return Results.Ok(new LoginResponse(token, state.VaultId));
 }).RequireRateLimiting("login");
 app.MapPost("/api/logout", (HttpContext ctx) => { sessions.TryRemove(ctx.Request.Headers.Authorization.ToString()[7..], out _); return Results.Ok(); });
-app.MapPost("/api/sync", async (SyncRequest request) =>
+app.MapPost("/api/sync", async (SyncRequest request, HttpContext ctx) =>
 {
     await gate.WaitAsync();
     try
     {
+        if (ctx.Request.Headers["X-LicentieKluis-Protocol"] != "2" && (state.Entries.Any(e => e.Kind == "recovery") || request.Changes.Any(c => c.Value.Kind == "recovery")))
+            return Results.Conflict(new { error = "Deze kluis bevat herstelsleutels. Werk de Windowsapp bij naar 1.0.0 of vernieuw de webpagina." });
         var (next, response) = SyncEngine.Apply(state, request);
         if (request.Changes.Count > 0) EncryptedFile.Save(vaultPath, next, config.Key);
         state = next;

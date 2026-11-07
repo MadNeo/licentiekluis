@@ -1,6 +1,7 @@
 use anyhow::{ensure,Context,Result};
 use native_windows_gui as nwg;
 #[path = "ui_render.rs"] mod render;
+#[path = "ui_recovery.rs"] mod recovery_ui;
 #[path = "ui_theme.rs"] mod theme;
 #[cfg(test)] #[path = "ui_tests.rs"] mod tests;
 use licentiekluis_native::{model::{Entry,Installation,LocalState},vault,database,sync::{self,Session},mail};
@@ -15,10 +16,12 @@ const IMPORT_CA:usize=20;
 const REMOVE_CA:usize=21;
 const TLS_CHECK:usize=22;
 const SERVER_SETTINGS:usize=23;
+const RECOVERY:usize=24;
 const UNLOCK:usize=0;const NEW:usize=1;const SAVE:usize=2;const DELETE:usize=3;const COPY:usize=4;const SHOW:usize=5;const ADDPERSON:usize=6;const RENAME:usize=7;const DELPERSON:usize=8;const ADDINSTALL:usize=9;const DELINSTALL:usize=10;const LOGIN:usize=11;const SYNC:usize=12;const LOGOUT:usize=13;const CONFLICT:usize=14;const BACKUP:usize=15;const RESTORE:usize=16;const LOCK:usize=17;
 type WorkResult=(u64,LocalState,std::result::Result<(LocalState,Session),String>);
 
 struct App {
+    recovery:recovery_ui::RecoveryUi,
     theme:Rc<theme::Theme>,theme_path:PathBuf,theme_button:nwg::Button,tabs:nwg::TabsContainer,_tabs:Vec<nwg::Tab>,changelog:nwg::TextBox,body_children:Vec<winapi::shared::windef::HWND>,
     sync_busy:Cell<bool>,epoch:Cell<u64>,connection:RefCell<Option<database::Credentials>>,
     paint_handlers:Vec<nwg::RawEventHandler>,settings_window:nwg::Window,_fonts:Vec<nwg::Font>,
@@ -41,7 +44,9 @@ pub fn run()->Result<()> {
     app.status.set_text("Vergrendeld. Nieuwe kluis: kies minimaal 14 tekens en herhaal het wachtwoord.");
     let weak=Rc::downgrade(&app);let mail_handler=nwg::full_bind_event_handler(&app.mail_window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){app.mail_event(event,handle);}});
     let weak=Rc::downgrade(&app);let settings_handler=nwg::full_bind_event_handler(&app.settings_window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){if event==nwg::Event::OnWindowClose{app.settings_window.set_visible(false);}else{app.event(event,handle);}}});
-    nwg::dispatch_thread_events();nwg::unbind_event_handler(&settings_handler);nwg::unbind_event_handler(&mail_handler);nwg::unbind_event_handler(&handler);drop(app);drop(lock);Ok(())
+    let weak=Rc::downgrade(&app);let recovery_handler=nwg::full_bind_event_handler(&app.recovery.window.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){app.recovery_event(event,handle);}});
+    let weak=Rc::downgrade(&app);let preview_handler=nwg::full_bind_event_handler(&app.recovery.preview.handle,move|event,_,handle|{if let Some(app)=weak.upgrade(){app.recovery_event(event,handle);}});
+    nwg::dispatch_thread_events();nwg::unbind_event_handler(&preview_handler);nwg::unbind_event_handler(&recovery_handler);nwg::unbind_event_handler(&settings_handler);nwg::unbind_event_handler(&mail_handler);nwg::unbind_event_handler(&handler);drop(app);drop(lock);Ok(())
 }
 impl App {
     fn build(path:PathBuf)->Result<Self> {
@@ -123,6 +128,7 @@ impl App {
             ("CA-certificaat kiezen",36,363,224), ("CA-certificaat wissen",274,363,224),
             ("Certificaatcontrole instellen",36,319,648),
             ("E-mail instellen",520,283,164),
+            ("Herstelsleutels",704,25,200),
         ];
         let mut buttons=vec![];
         for (i,(text,x,y,w)) in specifications.into_iter().enumerate(){let mut b=nwg::Button::default();let parent=if [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE,IMPORT_CA,REMOVE_CA,TLS_CHECK,SERVER_SETTINGS].contains(&i){&settings_window}else{&window};nwg::Button::builder().text(text).parent(parent).position((x,y)).size((w,30)).font(Some(&strong)).build(&mut b)?;buttons.push(b);}
@@ -179,13 +185,14 @@ impl App {
         paint_handlers.push(render::bind_tabs(&tabs,theme.clone())?);
         for tab in [&tab_main,&tab_changes]{paint_handlers.push(render::bind_tab_page(&tab.handle,theme.clone())?);unsafe{winapi::um::winuser::ShowWindow(tab.handle.hwnd().unwrap(),winapi::um::winuser::SW_HIDE);}}
         theme::repaint(&window,theme.dark.get());
-        Ok(Self{theme,theme_path,theme_button,tabs,_tabs:vec![tab_main,tab_changes],changelog,body_children,sync_busy:Cell::new(false),epoch:Cell::new(0),connection:RefCell::new(None),paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,license_count,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
+        let recovery=recovery_ui::RecoveryUi::build(&window,theme.clone())?;
+        Ok(Self{recovery,theme,theme_path,theme_button,tabs,_tabs:vec![tab_main,tab_changes],changelog,body_children,sync_busy:Cell::new(false),epoch:Cell::new(0),connection:RefCell::new(None),paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,license_count,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
     }
-    fn error(&self,e:anyhow::Error){self.modal.set(true);nwg::modal_error_message(&self.window,"Bewerking niet voltooid",&format!("{e:#}"));self.modal.set(false);}
-    fn confirm(&self,text:&str)->bool{self.modal.set(true);let result=nwg::modal_message(&self.window,&nwg::MessageParams{title:"LicentieKluis",content:text,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning});self.modal.set(false);result==nwg::MessageChoice::Yes}
+    fn error(&self,e:anyhow::Error){let was_modal=self.modal.replace(true);nwg::modal_error_message(&self.window,"Bewerking niet voltooid",&format!("{e:#}"));self.modal.set(was_modal);}
+    fn confirm(&self,text:&str)->bool{let was_modal=self.modal.replace(true);let result=nwg::modal_message(&self.window,&nwg::MessageParams{title:"LicentieKluis",content:text,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning});self.modal.set(was_modal);result==nwg::MessageChoice::Yes}
     fn snapshot(&self)->Result<LocalState>{self.state.borrow().clone().context("Ontgrendel eerst de kluis")}
     fn commit(&self,next:LocalState)->Result<()>{let p=self.password.borrow();database::save(&self.path,&next,p.as_ref().context("Kluis vergrendeld")?)?;drop(p);*self.state.borrow_mut()=Some(next);self.dirty.set(false);self.refresh();Ok(())}
-    fn set_theme(&self,dark:bool)->Result<()> {self.theme.dark.set(dark);self.theme_button.set_text(if dark{"Lichte modus"}else{"Donkere modus"});for window in [&self.window,&self.settings_window,&self.mail_window]{theme::repaint(window,dark);}self.theme.save(&self.theme_path)}
+    fn set_theme(&self,dark:bool)->Result<()> {self.theme.dark.set(dark);self.theme_button.set_text(if dark{"Lichte modus"}else{"Donkere modus"});for window in [&self.window,&self.settings_window,&self.mail_window,&self.recovery.window,&self.recovery.preview]{theme::repaint(window,dark);}self.theme.save(&self.theme_path)}
     fn select_tab(&self){for tab in &self._tabs{unsafe{winapi::um::winuser::ShowWindow(tab.handle.hwnd().unwrap(),winapi::um::winuser::SW_HIDE);}}let changes=self.tabs.selected_tab()==1;theme::show_body(&self.body_children,!changes);self.changelog.set_visible(changes);if changes{self.changelog.set_focus();}theme::repaint(&self.window,self.theme.dark.get());}
     fn event(&self,event:nwg::Event,handle:nwg::ControlHandle){
         if event==nwg::Event::OnButtonClick && handle==self.theme_button.handle {if let Err(e)=self.set_theme(!self.theme.dark.get()){self.error(e);}return;}
@@ -211,6 +218,7 @@ impl App {
         if i==UNLOCK{return self.unlock();}
         ensure!(self.state.borrow().is_some(),"Ontgrendel eerst de kluis");
         match i {
+            RECOVERY=>self.recovery_open()?,
             MAIL=>self.open_mail()?,
             NEW=>{if self.discard(){self.fill(None);}},SAVE=>self.save_license()?,DELETE=>self.delete_license()?,
             COPY=>{let code=self.fields[CODE].text();clipboard_win::set_clipboard_string(&code).map_err(|e|anyhow::anyhow!("Kopiëren naar klembord mislukt: {e:?}"))?;*self.copied.borrow_mut()=Some((Zeroizing::new(code),Instant::now()));},
@@ -225,7 +233,7 @@ impl App {
             SERVER_SETTINGS => self.open_server_settings()?,
             LOGOUT=>{database::forget(&self.path)?;*self.connection.borrow_mut()=None;self.epoch.set(self.epoch.get()+1);if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.status.set_text("Afgemeld. Lokaal werken blijft beschikbaar.");},
             CONFLICT=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.resolve()?;},BACKUP=>self.backup(false)?,RESTORE=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.backup(true)?;},
-            LOCK=>{if self.discard(){self.epoch.set(self.epoch.get()+1);*self.connection.borrow_mut()=None;self.clear_clipboard();self.fields[CODE].set_text("");self.fields[SERVERPW].set_text("");self.fields[BACKUPPW].set_text("");*self.state.borrow_mut()=None;*self.password.borrow_mut()=None;if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.fill(None);self.people.clear();self.licenses.clear();self.license_count.set_text("Ontgrendel de kluis om licenties te bekijken");self.owner.set_collection(vec![]);self.fields[PERSON].set_text("");self.status.set_text("Vergrendeld");}},_=>{}
+            LOCK=>{if self.discard(){self.recovery.clear();self.recovery.window.set_visible(false);self.epoch.set(self.epoch.get()+1);*self.connection.borrow_mut()=None;self.clear_clipboard();self.fields[CODE].set_text("");self.fields[SERVERPW].set_text("");self.fields[BACKUPPW].set_text("");*self.state.borrow_mut()=None;*self.password.borrow_mut()=None;if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.fill(None);self.people.clear();self.licenses.clear();self.license_count.set_text("Ontgrendel de kluis om licenties te bekijken");self.owner.set_collection(vec![]);self.fields[PERSON].set_text("");self.status.set_text("Vergrendeld");}},_=>{}
         }Ok(())
     }
     fn unlock(&self)->Result<()> {
@@ -435,7 +443,7 @@ impl App {
             }
         }
     }
-    fn resolve(&self)->Result<()>{let mut s=self.snapshot()?;let ids:Vec<_>=s.conflicts.keys().copied().collect();if ids.is_empty(){self.status.set_text("Geen conflicten");return Ok(());}for id in ids{let local=s.entries.iter().find(|e|e.id==id).context("Record ontbreekt")?;let remote=&s.conflicts[&id];let describe=|e:&Entry|format!("{}\nVersie: {}\nVerwijderd: {}\nInstallaties: {}\nOpmerkingen: {}",e.name,e.software_version,e.deleted,e.installations.iter().map(|i|format!("{} / {}",i.platform,i.device)).collect::<Vec<_>>().join(", "),e.notes);let text=format!("LOKAAL\n{}\n\nSERVER\n{}\n\nCode verschilt: {}\n\nJa: lokale versie behouden\nNee: serverversie overnemen\nAnnuleren: later beslissen",describe(local),describe(remote),local.code!=remote.code);self.modal.set(true);let answer=nwg::modal_message(&self.window,&nwg::MessageParams{title:"Synchronisatieconflict",content:&text,buttons:nwg::MessageButtons::YesNoCancel,icons:nwg::MessageIcons::Warning});self.modal.set(false);if answer==nwg::MessageChoice::Cancel{break;}s.resolve(id,answer==nwg::MessageChoice::Yes)?;}self.commit(s)}
+    fn resolve(&self)->Result<()>{let mut s=self.snapshot()?;let ids:Vec<_>=s.conflicts.keys().copied().collect();if ids.is_empty(){self.status.set_text("Geen conflicten");return Ok(());}for id in ids{let local=s.entries.iter().find(|e|e.id==id).context("Record ontbreekt")?;let remote=&s.conflicts[&id];let describe=|e:&Entry|format!("{}\nVersie: {}\nVerwijderd: {}\nInstallaties: {}\nOpmerkingen: {}",e.name,e.software_version,e.deleted,e.installations.iter().map(|i|format!("{} / {}",i.platform,i.device)).collect::<Vec<_>>().join(", "),e.notes);let text=format!("LOKAAL\n{}\n\nSERVER\n{}\n\nCode of herstelinhoud verschilt: {}\n\nJa: lokale versie behouden\nNee: serverversie overnemen\nAnnuleren: later beslissen",describe(local),describe(remote),local.code!=remote.code || local.recovery!=remote.recovery);self.modal.set(true);let answer=nwg::modal_message(&self.window,&nwg::MessageParams{title:"Synchronisatieconflict",content:&text,buttons:nwg::MessageButtons::YesNoCancel,icons:nwg::MessageIcons::Warning});self.modal.set(false);if answer==nwg::MessageChoice::Cancel{break;}s.resolve(id,answer==nwg::MessageChoice::Yes)?;}self.commit(s)}
     fn backup(&self,restore:bool)->Result<()>{let mut dialog=nwg::FileDialog::default();nwg::FileDialog::builder().title(if restore{"Back-up herstellen (ook .NET 0.1)"}else{"Versleutelde back-up opslaan"}).action(if restore{nwg::FileDialogAction::Open}else{nwg::FileDialogAction::Save}).filters("Kluis(*.lkv)").build(&mut dialog)?;self.modal.set(true);let accepted=dialog.run(Some(&self.window));self.modal.set(false);if !accepted{return Ok(());}let path=PathBuf::from(dialog.get_selected_item()?);ensure!(path!=self.path,"Kies een andere locatie dan de actieve kluis");if restore{let password=Zeroizing::new(self.fields[BACKUPPW].text());self.fields[BACKUPPW].set_text("");let s=vault::load(&path,&password)?;if !self.confirm("De huidige lokale kluis vervangen? Er wordt eerst een herstelkopie gemaakt. Gebruik daarna alleen deze client voor nieuwe wijzigingen."){return Ok(());}let before=self.path.with_file_name(format!("before-restore-{}.lkv",chrono::Local::now().format("%Y%m%d-%H%M%S")));vault::save(&before,&self.snapshot()?,self.password.borrow().as_ref().context("Vergrendeld")?)?;*self.session.borrow_mut()=None;self.fields[URL].set_text(&s.server_url);self.commit(s)?;database::forget(&self.path)?;*self.connection.borrow_mut()=None;self.epoch.set(self.epoch.get()+1);}else{vault::save(&path,&self.snapshot()?,self.password.borrow().as_ref().context("Vergrendeld")?)?;self.status.set_text("Back-up opgeslagen; bewaar het lokale kluiswachtwoord voor herstel.");}Ok(())}
     fn open_mail(&self)->Result<()> {
         ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");let s=self.snapshot()?;
@@ -468,7 +476,7 @@ impl App {
         match result{Some(Ok(outcome))=>{*self.mail_draft.borrow_mut()=None;self.mail_preview.set_text(&outcome.message);nwg::modal_info_message(&self.mail_window,"Mailstatus",&outcome.message);},Some(Err(error))=>{nwg::modal_error_message(&self.mail_window,"Verzending niet bevestigd",&format!("{}\nControleer eerst de ontvangst. Bij opnieuw klikken blijft hetzelfde verzoeknummer behouden om dubbele verzending te voorkomen.",error));},None=>{}}
     }
     fn clear_clipboard(&self){if let Some((value,_))=self.copied.borrow_mut().take(){if clipboard_win::get_clipboard_string().ok().as_deref()==Some(value.as_str()){let _=clipboard_win::set_clipboard_string("");}}}
-    fn tick(&self){let expire=self.copied.borrow().as_ref().is_some_and(|(_,t)|t.elapsed()>Duration::from_secs(30));if expire{self.clear_clipboard();}if self.revealed.get().is_some_and(|t|t.elapsed()>Duration::from_secs(30)){self.fields[CODE].set_password_char(Some('*'));self.revealed.set(None);}if !self.busy.get()&&!self.sync_busy.get()&&!self.modal.get()&&self.state.borrow().is_some()&&self.connection.borrow().is_some()&&self.last_sync.get().elapsed()>Duration::from_secs(30){self.last_sync.set(Instant::now());if let Err(e)=self.begin_work(false){self.status.set_text(&e.to_string());}}}
+    fn tick(&self){self.recovery.tick();let expire=self.copied.borrow().as_ref().is_some_and(|(_,t)|t.elapsed()>Duration::from_secs(30));if expire{self.clear_clipboard();}if self.revealed.get().is_some_and(|t|t.elapsed()>Duration::from_secs(30)){self.fields[CODE].set_password_char(Some('*'));self.revealed.set(None);}if !self.busy.get()&&!self.sync_busy.get()&&!self.modal.get()&&self.state.borrow().is_some()&&self.connection.borrow().is_some()&&self.last_sync.get().elapsed()>Duration::from_secs(30){self.last_sync.set(Instant::now());if let Err(e)=self.begin_work(false){self.status.set_text(&e.to_string());}}}
 }
 
 impl Drop for App {

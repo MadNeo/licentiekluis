@@ -80,3 +80,7 @@ Een opgeslagen wachtwoord wordt nooit teruggestuurd naar de browser. Laat het wa
 Bij een onzekere testmailstatus controleer je eerst je inbox. De knop **Status opnieuw controleren** hergebruikt hetzelfde verzoeknummer en voorkomt opnieuw versturen als de server het bericht al heeft aangeboden. Een nieuw testmailverzoek verstuurt bewust een nieuw bericht.
 
 Bestaande `smtp.lkv`-instellingen worden automatisch gelezen en blijven versleuteld opgeslagen. Het oude configuratiescript blijft beschikbaar voor bestaande installaties, maar is niet nodig voor instellingenbeheer. Na een eenmalige update naar web 0.8.0 regel je dit via de pagina.
+
+## Herstelsleutels
+
+Sinds web/server 0.9.0 staat **Herstelsleutels** naast Licenties en Instellingen. Zie [invoer, opslag en herstel](HERSTELSLEUTELS.md).

@@ -19,10 +19,10 @@ const server=http.createServer(async(req,res)=>{
   if(req.url==='/api/settings/mail/test'){testCalls.push(body);if(testCalls.length===1){deliveries++;return json({error:'Test: antwoord na verzending onderbroken'},503);}assert.equal(body.requestId,testCalls[0].requestId);return json({status:'submitted',message:'Deze testmail is al aangeboden; niet opnieuw verzonden.'});}
   return json({},404);
  }
- const file=['/','/settings'].includes(req.url)?'index.html':req.url.slice(1);
- if(!['index.html','app.js','vault.js','manage.js','mail.js','settings.js','app.css','theme.js'].includes(file))return json({},404);
+ const file=['/','/settings','/recovery'].includes(req.url)?'index.html':req.url.slice(1);
+ if(!['index.html','app.js','vault.js','manage.js','mail.js','settings.js','recovery.js','app.css','theme.js'].includes(file))return json({},404);
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');
- res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");res.end(fs.readFileSync(path.join(root,file)));
+ res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");res.end(fs.readFileSync(path.join(root,file)));
 });
 (async()=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
