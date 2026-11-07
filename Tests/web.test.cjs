@@ -18,8 +18,14 @@ const el=id=>context.document.getElementById(id),run=code=>vm.runInContext(code,
  el('platform').value='Linux';el('platform').listeners.change();assert.equal(el('licenses').children.length,1);assert.equal(el('licenses').children[0].children[0].textContent,'Serverpakket');console.log('PASS: platform filter');
  el('platform').value='';el('owner').value='p1';el('owner').listeners.change();assert.equal(el('licenses').children.length,1);console.log('PASS: owner filter');
  el('owner').value='';el('search').value='LXC1';el('search').listeners.input();assert.equal(el('licenses').children[0].children[0].textContent,'Serverpakket');console.log('PASS: device search');
+ el('search').value='1';el('search').listeners.input();assert.equal(el('licenses').children[0].children[0].textContent,licenses[0].name);
+ el('search').value='';const today=run('dateKey(new Date())');const previousExpiry=licenses[1].expires;licenses[1].expires=today;
+ el('expiryFilter').value='soon';el('expiryFilter').listeners.change();assert.equal(el('licenses').children.length,1);assert.equal(el('licenses').children[0].children[0].textContent,'Serverpakket');
+ el('expiryFilter').value='none';el('expiryFilter').listeners.change();assert.equal(el('licenses').children.length,1);assert.equal(el('licenses').children[0].children[0].textContent,licenses[0].name);
+ licenses[1].expires=previousExpiry;el('clearFilters').listeners.click();assert.equal(el('licenses').children.length,2);assert.equal(el('clearFilters').disabled,true);
+ el('search').value='LXC1';el('search').listeners.input();console.log('PASS: version search, expiry filters and reset');
  const card=el('licenses').children[0],actions=card.children.at(-1),code=card.children.at(-2);await actions.children[0].listeners.click();assert.equal(code.textContent,'DEMO-CODE');const reset=[...timeouts.values()].find(t=>t.ms===30000);assert.ok(reset);reset.fn();assert.equal(code.textContent,'•••• •••• ••••');console.log('PASS: authenticated reveal and timed masking');
  await run('logout()');assert.equal(el('dashboard').hidden,true);assert.equal(el('licenses').children.length,0);assert.equal(run('token'),'');assert.equal(run('entries.length'),0);console.log('PASS: logout removes credentials and rendered data');
  unauthorized=true;await el('loginForm').listeners.submit({preventDefault(){}});assert.equal(el('dashboard').hidden,true);assert.equal(run('token'),'');console.log('PASS: expired session locks browser');
- assert.ok(calls.filter(c=>c.url==='/api/entries').every(c=>c.options.headers.Authorization==='Bearer synthetic-token'));console.log('8 web UI logic checks passed (mocked DOM/API).');
+ assert.ok(calls.filter(c=>c.url==='/api/entries').every(c=>c.options.headers.Authorization==='Bearer synthetic-token'));console.log('9 web UI logic checks passed (mocked DOM/API).');
 })().catch(e=>{console.error(e);process.exitCode=1;});

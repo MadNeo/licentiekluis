@@ -25,7 +25,7 @@ pub unsafe fn draw_item(l:LPARAM,theme:&Theme)->bool {
  let dc=item.hDC;let selected=item.itemState&ODS_SELECTED!=0;
  let mut text=[0u16;512];if item.CtlType==ODT_TAB{let mut info:TCITEMW=std::mem::zeroed();info.mask=TCIF_TEXT;info.pszText=text.as_mut_ptr();info.cchTextMax=512;SendMessageW(item.hwndItem,TCM_GETITEMW,item.itemID as usize,&mut info as *mut _ as LPARAM);}else{GetWindowTextW(item.hwndItem,text.as_mut_ptr(),512);}
  let caption=String::from_utf16_lossy(&text[..text.iter().position(|c|*c==0).unwrap_or(text.len())]);
- let primary=item.CtlType==ODT_BUTTON&&["Opslaan","Ontgrendelen","Nieuwe licentie","Aanmelden","Voorbeeld maken"].contains(&caption.as_str());
+ let primary=item.CtlType==ODT_BUTTON&&["Opslaan","Ontgrendelen","+ Nieuwe licentie","Aanmelden","Voorbeeld maken"].contains(&caption.as_str());
  let color=if primary{[20,139,125]}else if selected{[228,245,241]}else{[255,255,255]};
  let backdrop=SendMessageW(GetParent(item.hwndItem),WM_CTLCOLORBTN,dc as usize,item.hwndItem as isize) as HBRUSH;FillRect(dc,&item.rcItem,backdrop);
  let brush=theme.brush(color);let pen=CreatePen(PS_SOLID as i32,1,if primary{if theme.dark.get(){RGB(21,121,108)}else{RGB(20,110,101)}}else{theme.border()});
