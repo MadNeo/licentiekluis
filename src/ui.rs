@@ -10,6 +10,7 @@ use zeroize::Zeroizing;
 
 const PW:usize=0;const REPEAT:usize=1;const SEARCH:usize=2;const PERSON:usize=3;const NAME:usize=4;const CODE:usize=5;const VERSION:usize=6;const EXPIRY:usize=7;const DEVICE:usize=8;const URL:usize=9;const USER:usize=10;const SERVERPW:usize=11;const BACKUPPW:usize=12;
 const MAIL:usize=18;
+const SETTINGS:usize=19;
 const UNLOCK:usize=0;const NEW:usize=1;const SAVE:usize=2;const DELETE:usize=3;const COPY:usize=4;const SHOW:usize=5;const ADDPERSON:usize=6;const RENAME:usize=7;const DELPERSON:usize=8;const ADDINSTALL:usize=9;const DELINSTALL:usize=10;const LOGIN:usize=11;const SYNC:usize=12;const LOGOUT:usize=13;const CONFLICT:usize=14;const BACKUP:usize=15;const RESTORE:usize=16;const LOCK:usize=17;
 type WorkResult=(u64,LocalState,std::result::Result<(LocalState,Session),String>);
 
@@ -20,7 +21,7 @@ struct App {
     mail_window:nwg::Window,mail_licenses:nwg::ListBox<String>,mail_to:nwg::TextInput,mail_subject:nwg::TextInput,mail_preview:nwg::TextBox,mail_buttons:Vec<nwg::Button>,mail_entries:RefCell<Vec<Entry>>,mail_draft:RefCell<Option<mail::Draft>>,mail_result:Arc<Mutex<Option<std::result::Result<mail::Outcome,String>>>>,
     window:nwg::Window, labels:Vec<nwg::Label>, fields:Vec<nwg::TextInput>, buttons:Vec<nwg::Button>,
     people:nwg::ListBox<String>, licenses:nwg::ListBox<String>, owner:nwg::ComboBox<String>, platform:nwg::ComboBox<String>, filter:nwg::ComboBox<String>,
-    installations:nwg::ListBox<String>,notes:nwg::TextBox,status:nwg::Label,notice:nwg::Notice,timer:nwg::AnimationTimer,
+    installations:nwg::ListBox<String>,notes:nwg::TextBox,license_count:nwg::Label,status:nwg::Label,notice:nwg::Notice,timer:nwg::AnimationTimer,
     state:RefCell<Option<LocalState>>,password:RefCell<Option<Zeroizing<String>>>,session:RefCell<Option<Session>>,
     selected:Cell<Option<Uuid>>,people_ids:RefCell<Vec<Uuid>>,license_ids:RefCell<Vec<Uuid>>,draft_installs:RefCell<Vec<Installation>>,
     loading:Cell<bool>,dirty:Cell<bool>,busy:Cell<bool>,modal:Cell<bool>,path:PathBuf,
@@ -61,25 +62,34 @@ impl App {
         label(&window,"",0,0,1180,80,white,&small)?;
         label(&window,"",0,0,6,80,teal,&small)?;
         label(&window,"LicentieKluis",24,13,440,34,white,&title)?;
-        label(&window,"Al je softwarelicenties. Veilig op één plek.",26,50,620,22,white,&small)?;
+        label(&window,"WERKRUIMTE  /  SOFTWARELICENTIES",26,50,425,20,white,&small)?;
         label(&window,"",20,96,1140,72,mint,&small)?;
         label(&window,"",20,96,4,72,teal,&small)?;
         label(&window,"Kluiswachtwoord",36,106,204,20,mint,&small)?;
         label(&window,"Herhalen bij een nieuwe kluis",254,106,228,20,mint,&small)?;
         label(&window,"Lokaal versleuteld opgeslagen",666,108,300,20,mint,&strong)?;
         label(&window,"Je kunt ook zonder server blijven werken.",666,133,340,22,mint,&small)?;
-        for (x,w) in [(20,208),(244,326),(586,574)] {label(&window,"",x,184,w,540,white,&small)?;}
-        label(&window,"Gebruikers",36,200,176,26,white,&heading)?;
-        label(&window,"Kies een licentiehouder",36,230,176,22,white,&small)?;
-        label(&window,"Naam gebruiker",36,540,176,20,white,&small)?;
-        label(&window,"Licenties",260,200,292,26,white,&heading)?;
-        label(&window,"Zoek op software, versie of apparaat",260,230,292,22,white,&small)?;
-        label(&window,"Licentiegegevens",604,200,530,26,white,&heading)?;
-        for (text,x,y,w) in [("Software",604,246,254),("Toegewezen aan",874,246,268),("Licentiecode",604,308,538),("Versie",604,370,160),("Geldig tot (jjjj-mm-dd, of leeg)",780,370,244),("Platform",604,432,144),("Apparaat",764,432,230),("Opmerkingen",604,570,538)] {
-            label(&window,text,x,y,w,22,white,&small)?;
+        for (x, w) in [(20, 198), (232, 360), (606, 554)] {
+            label(&window, "", x, 184, w, 540, white, &small)?;
         }
-        
-        label(&window,"",20,738,4,26,teal,&small)?;
+        label(&window,"Gebruikers",36,200,166,26,white,&heading)?;
+        label(&window,"Filter op licentiehouder",36,231,166,20,white,&small)?;
+        label(&window,"Gebruikers beheren",36,532,166,23,white,&strong)?;
+        label(&window,"Licenties",248,200,162,26,white,&heading)?;
+        label(&window,"Zoek op software, versie of apparaat",248,246,328,20,white,&small)?;
+        label(&window,"Licentiegegevens",624,200,518,26,white,&heading)?;
+        for (text, x, y, w) in [
+            ("Software",624,240,248), ("Toegewezen aan",888,240,254),
+            ("Licentiecode",624,300,518), ("Versie",624,360,160),
+            ("Geldig tot (jjjj-mm-dd)",800,360,230),
+            ("Installaties",624,422,518),
+            ("Platform",624,449,144), ("Apparaat",784,449,230),
+            ("Opmerkingen",624,586,518),
+        ] {
+            let font = if text == "Installaties" { &strong } else { &small };
+            label(&window,text,x,y,w,20,white,font)?;
+        }
+        label(&window,"",20,738,1140,34,mint,&small)?;
         label(&settings_window,"",0,0,720,520,bg,&small)?;
         label(&settings_window,"Verbinding & back-up",24,18,664,36,bg,&title)?;
         label(&settings_window,"Automatische sync elke 30 seconden. Zonder server werk je lokaal.",24,59,664,24,bg,&small)?;
@@ -90,21 +100,36 @@ impl App {
         label(&settings_window,"Back-up & herstel",36,356,648,26,white,&heading)?;
         label(&settings_window,"Wachtwoord van de back-up (alleen bij herstellen)",36,394,420,22,white,&small)?;
         label(&settings_window,"Bewaar je back-up ook buiten deze computer.",36,461,620,22,white,&small)?;
-        let positions=[(36,130,204),(254,130,228),(260,262,292),(36,566,176),(604,272,254),(604,334,352),(604,396,160),(780,396,244),(764,458,230),(36,175,648),(36,241,252),(304,241,236),(36,420,330)];
+        let positions=[(36,130,204),(254,130,228),(248,270,328),(36,562,166),(624,262,248),(624,322,334),(624,382,160),(800,382,244),(784,472,216),(36,175,648),(36,241,252),(304,241,236),(36,420,330)];
         let placeholders=["Wachtwoord","Nogmaals (alleen eerste keer)","Zoeken…","Naam gebruiker","Bijvoorbeeld Microsoft Office","Licentiecode","Bijvoorbeeld 2024","Leeg = geen einddatum","Bijvoorbeeld laptop kantoor","https://192.168.178.100","Gebruikersnaam","Serverwachtwoord","Wachtwoord van de back-up"];
         let mut fields=vec![];
         for (i,(x,y,w)) in positions.into_iter().enumerate(){let mut f=nwg::TextInput::default();let parent=if i>=URL{&settings_window}else{&window};nwg::TextInput::builder().parent(parent).position((x,y)).size((w,28)).placeholder_text(Some(placeholders[i])).password(if [PW,REPEAT,CODE,SERVERPW,BACKUPPW].contains(&i){Some('●')}else{None}).build(&mut f)?;if i==CODE{f.set_font(Some(&mono));}fields.push(f);}
-        let specifications=[("Ontgrendelen",494,128,140),("Nieuwe licentie",260,666,142),("Opslaan",604,666,156),("Verwijderen",414,666,140),("Kopiëren",968,334,82),("Tonen",1060,334,82),("Toevoegen",36,606,176),("Hernoemen",36,646,176),("Verwijderen",36,686,176),("+",1006,458,60),("−",1078,458,64),("Aanmelden",556,239,128),("Synchroniseren",36,283,184),("Afmelden",232,283,132),("Conflicten",376,283,132),("Back-up maken",382,418,146),("Herstellen",540,418,144),("Vergrendelen",1018,128,126),("Licenties mailen",900,666,242),("Verbinding & back-up",920,25,224)];
+        let specifications = [
+            ("Ontgrendelen",494,128,140), ("+ Nieuwe licentie",420,199,156),
+            ("Opslaan",986,674,156), ("Verwijderen",624,674,140),
+            ("Kopiëren",968,322,82), ("Tonen",1060,322,82),
+            ("Toevoegen",36,600,166), ("Hernoemen",36,638,166),
+            ("Verwijderen",36,676,166), ("Voeg toe",1008,470,80),
+            ("−",1094,470,48), ("Aanmelden",556,239,128),
+            ("Synchroniseren",36,283,184), ("Afmelden",232,283,132),
+            ("Conflicten",376,283,132), ("Back-up maken",382,418,146),
+            ("Herstellen",540,418,144), ("Vergrendelen",1018,128,126),
+            ("Licenties delen",248,674,328), ("Verbinding & back-up",920,25,224),
+        ];
         let mut buttons=vec![];
         for (i,(text,x,y,w)) in specifications.into_iter().enumerate(){let mut b=nwg::Button::default();let parent=if [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE].contains(&i){&settings_window}else{&window};nwg::Button::builder().text(text).parent(parent).position((x,y)).size((w,30)).font(Some(&strong)).build(&mut b)?;buttons.push(b);}
-        let mut people=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((36,262)).size((176,258)).build(&mut people)?;
-        let mut licenses=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((260,342)).size((292,306)).build(&mut licenses)?;
-        let mut owner=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((874,272)).size((268,200)).build(&mut owner)?;
-        let mut platform=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((604,458)).size((144,200)).collection(vec!["Windows".to_string(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut platform)?;
-        let mut filter=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((260,303)).size((292,200)).collection(vec!["Alle platforms".to_string(),"Windows".into(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut filter)?;
-        let mut installations=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((604,500)).size((538,64)).build(&mut installations)?;
-        let mut notes=nwg::TextBox::default();nwg::TextBox::builder().parent(&window).position((604,596)).size((538,52)).flags(nwg::TextBoxFlags::VISIBLE|nwg::TextBoxFlags::TAB_STOP|nwg::TextBoxFlags::VSCROLL|nwg::TextBoxFlags::AUTOVSCROLL).build(&mut notes)?;
-        let mut status=nwg::Label::default();nwg::Label::builder().parent(&window).position((36,740)).size((1108,34)).background_color(Some(bg)).font(Some(&small)).build(&mut status)?;
+        let mut people=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((36,258)).size((166,256)).build(&mut people)?;
+        let mut licenses=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((248,373)).size((328,285)).build(&mut licenses)?;
+        let mut owner=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((888,262)).size((254,200)).build(&mut owner)?;
+        let mut platform=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((624,472)).size((144,200)).collection(vec!["Windows".to_string(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut platform)?;
+        let mut filter=nwg::ComboBox::default();nwg::ComboBox::builder().parent(&window).position((248,310)).size((328,200)).collection(vec!["Alle platforms".to_string(),"Windows".into(),"Linux".into(),"macOS".into()]).selected_index(Some(0)).build(&mut filter)?;
+        let mut installations=nwg::ListBox::default();nwg::ListBox::builder().parent(&window).position((624,511)).size((518,66)).build(&mut installations)?;
+        let mut notes=nwg::TextBox::default();nwg::TextBox::builder().parent(&window).position((624,609)).size((518,52)).flags(nwg::TextBoxFlags::VISIBLE|nwg::TextBoxFlags::TAB_STOP|nwg::TextBoxFlags::VSCROLL|nwg::TextBoxFlags::AUTOVSCROLL).build(&mut notes)?;
+        let mut license_count = nwg::Label::default();
+        nwg::Label::builder().parent(&window).position((248,344)).size((328,22))
+            .text("Ontgrendel de kluis om licenties te bekijken").font(Some(&small))
+            .build(&mut license_count)?;
+        let mut status=nwg::Label::default();nwg::Label::builder().parent(&window).position((36,741)).size((1108,28)).background_color(Some(mint)).font(Some(&small)).build(&mut status)?;
         let mut notice=nwg::Notice::default();nwg::Notice::builder().parent(&window).build(&mut notice)?;
         let mut timer=nwg::AnimationTimer::default();nwg::AnimationTimer::builder().parent(&window).interval(Duration::from_secs(1)).active(true).build(&mut timer)?;
         label(&mail_window,"",0,0,920,680,bg,&small)?;
@@ -136,13 +161,17 @@ impl App {
             for l in labels.iter().filter(|l| unsafe {winapi::um::winuser::GetParent(l.handle.hwnd().unwrap())==parent.handle.hwnd().unwrap()}) {
                 paint_handlers.push(render::bind_label(l,theme.clone())?);
             }
-            if parent.handle==window.handle {paint_handlers.push(render::bind_label(&status,theme.clone())?);}
+            if parent.handle == window.handle {
+                for label in [&status, &license_count] {
+                    paint_handlers.push(render::bind_label(label, theme.clone())?);
+                }
+            }
             theme::repaint(parent,theme.dark.get());
         }
         paint_handlers.push(render::bind_tabs(&tabs,theme.clone())?);
         for tab in [&tab_main,&tab_changes]{paint_handlers.push(render::bind_tab_page(&tab.handle,theme.clone())?);unsafe{winapi::um::winuser::ShowWindow(tab.handle.hwnd().unwrap(),winapi::um::winuser::SW_HIDE);}}
         theme::repaint(&window,theme.dark.get());
-        Ok(Self{theme,theme_path,theme_button,tabs,_tabs:vec![tab_main,tab_changes],changelog,body_children,sync_busy:Cell::new(false),epoch:Cell::new(0),connection:RefCell::new(None),paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
+        Ok(Self{theme,theme_path,theme_button,tabs,_tabs:vec![tab_main,tab_changes],changelog,body_children,sync_busy:Cell::new(false),epoch:Cell::new(0),connection:RefCell::new(None),paint_handlers,settings_window,_fonts:vec![title,heading,small,strong,mono],mail_window,mail_licenses,mail_to,mail_subject,mail_preview,mail_buttons,mail_entries:RefCell::new(vec![]),mail_draft:RefCell::new(None),mail_result:Arc::new(Mutex::new(None)),window,labels,fields,buttons,people,licenses,owner,platform,filter,installations,notes,license_count,status,notice,timer,state:RefCell::new(None),password:RefCell::new(None),session:RefCell::new(None),selected:Cell::new(None),people_ids:RefCell::new(vec![]),license_ids:RefCell::new(vec![]),draft_installs:RefCell::new(vec![]),loading:Cell::new(false),dirty:Cell::new(false),busy:Cell::new(false),modal:Cell::new(false),path,result:Arc::new(Mutex::new(None)),last_sync:Cell::new(Instant::now()),copied:RefCell::new(None),revealed:Cell::new(None)})
     }
     fn error(&self,e:anyhow::Error){self.modal.set(true);nwg::modal_error_message(&self.window,"Bewerking niet voltooid",&format!("{e:#}"));self.modal.set(false);}
     fn confirm(&self,text:&str)->bool{self.modal.set(true);let result=nwg::modal_message(&self.window,&nwg::MessageParams{title:"LicentieKluis",content:text,buttons:nwg::MessageButtons::YesNo,icons:nwg::MessageIcons::Warning});self.modal.set(false);result==nwg::MessageChoice::Yes}
@@ -170,7 +199,7 @@ impl App {
     }
     fn discard(&self)->bool{!self.dirty.get()||self.confirm("Niet-opgeslagen licentie-invoer verwerpen?")}
     fn action(&self,i:usize)->Result<()> {
-        if i==19{self.settings_window.set_visible(true);self.settings_window.set_focus();return Ok(());}
+        if i==SETTINGS{self.settings_window.set_visible(true);self.settings_window.set_focus();return Ok(());}
         if i==UNLOCK{return self.unlock();}
         ensure!(self.state.borrow().is_some(),"Ontgrendel eerst de kluis");
         match i {
@@ -184,7 +213,7 @@ impl App {
             LOGIN=>self.begin_work(true)?,SYNC=>self.begin_work(false)?,
             LOGOUT=>{database::forget(&self.path)?;*self.connection.borrow_mut()=None;self.epoch.set(self.epoch.get()+1);if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.status.set_text("Afgemeld. Lokaal werken blijft beschikbaar.");},
             CONFLICT=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.resolve()?;},BACKUP=>self.backup(false)?,RESTORE=>{ensure!(!self.dirty.get(),"Sla eerst de licentie-invoer op");self.backup(true)?;},
-            LOCK=>{if self.discard(){self.epoch.set(self.epoch.get()+1);*self.connection.borrow_mut()=None;self.clear_clipboard();self.fields[CODE].set_text("");self.fields[SERVERPW].set_text("");self.fields[BACKUPPW].set_text("");*self.state.borrow_mut()=None;*self.password.borrow_mut()=None;if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.fill(None);self.people.clear();self.licenses.clear();self.owner.set_collection(vec![]);self.fields[PERSON].set_text("");self.status.set_text("Vergrendeld");}},_=>{}
+            LOCK=>{if self.discard(){self.epoch.set(self.epoch.get()+1);*self.connection.borrow_mut()=None;self.clear_clipboard();self.fields[CODE].set_text("");self.fields[SERVERPW].set_text("");self.fields[BACKUPPW].set_text("");*self.state.borrow_mut()=None;*self.password.borrow_mut()=None;if let Some(s)=self.session.borrow_mut().take(){std::thread::spawn(move||sync::logout(&s));}self.fill(None);self.people.clear();self.licenses.clear();self.license_count.set_text("Ontgrendel de kluis om licenties te bekijken");self.owner.set_collection(vec![]);self.fields[PERSON].set_text("");self.status.set_text("Vergrendeld");}},_=>{}
         }Ok(())
     }
     fn unlock(&self)->Result<()> {
@@ -203,7 +232,39 @@ impl App {
         self.loading.set(false);self.render_list();
     }
     fn render_list(&self){
-        self.loading.set(true);if let Some(s)=self.state.borrow().as_ref(){let owner=self.people.selection().filter(|i|*i>0).and_then(|i|self.people_ids.borrow().get(i-1).copied());let q=self.fields[SEARCH].text().to_lowercase();let filter=self.filter.selection_string().unwrap_or_default();let mut licenses:Vec<_>=s.entries.iter().filter(|e|e.kind=="license"&&!e.deleted&&(owner.is_none()||e.owner_id==owner)&&(filter=="Alle platforms"||filter.is_empty()||e.installations.iter().any(|i|i.platform==filter))&&format!("{} {} {}",e.name,e.software_version,e.installations.iter().map(|i|i.device.as_str()).collect::<Vec<_>>().join(" ")).to_lowercase().contains(&q)).collect();licenses.sort_by_key(|e|e.name.to_lowercase());*self.license_ids.borrow_mut()=licenses.iter().map(|e|e.id).collect();self.licenses.set_collection(licenses.iter().map(|e|format!("{}{}  ·  {}",if s.conflicts.contains_key(&e.id){"! "}else{""},e.name,e.installations.iter().map(|i|i.platform.as_str()).collect::<Vec<_>>().join(", "))).collect());}
+        self.loading.set(true);
+        if let Some(state) = self.state.borrow().as_ref() {
+            let owner = self.people.selection().filter(|i| *i > 0)
+                .and_then(|i| self.people_ids.borrow().get(i - 1).copied());
+            let query = self.fields[SEARCH].text().trim().to_lowercase();
+            let platform = self.filter.selection_string().unwrap_or_default();
+            let active: Vec<_> = state.entries.iter()
+                .filter(|entry| entry.kind == "license" && !entry.deleted).collect();
+            let mut matches: Vec<_> = active.iter().copied().filter(|entry| {
+                (owner.is_none() || entry.owner_id == owner)
+                    && (platform.is_empty() || platform == "Alle platforms"
+                        || entry.installations.iter().any(|item| item.platform == platform))
+                    && (query.is_empty() || entry.name.to_lowercase().contains(&query)
+                        || entry.software_version.to_lowercase().contains(&query)
+                        || entry.installations.iter().any(|item| item.device.to_lowercase().contains(&query)))
+            }).collect();
+            matches.sort_by_key(|entry| entry.name.to_lowercase());
+            let count = match (matches.len(), active.len()) {
+                (_, 0) => "Nog geen licenties".to_owned(),
+                (0, total) => format!("Geen resultaten · {total} in de kluis"),
+                (visible, total) => format!("{visible} van {total} zichtbaar"),
+            };
+            self.license_count.set_text(&count);
+            *self.license_ids.borrow_mut() = matches.iter().map(|entry| entry.id).collect();
+            self.licenses.set_collection(matches.iter().map(|entry| {
+                let warning = if state.conflicts.contains_key(&entry.id) { "! " } else { "" };
+                if entry.software_version.is_empty() {
+                    format!("{warning}{}", entry.name)
+                } else {
+                    format!("{warning}{}  ·  {}", entry.name, entry.software_version)
+                }
+            }).collect());
+        }
         self.loading.set(false);let id=self.selected.get().filter(|id|self.license_ids.borrow().contains(id));if let Some(id)=id{self.licenses.set_selection(self.license_ids.borrow().iter().position(|x|*x==id));}if !self.dirty.get(){self.fill(id);}
     }
     fn fill(&self,id:Option<Uuid>){
@@ -213,7 +274,7 @@ impl App {
         self.render_installs();self.dirty.set(false);self.loading.set(false);
     }
     fn render_installs(&self){self.installations.set_collection(self.draft_installs.borrow().iter().map(|i|format!("{}  |  {}",i.platform,i.device)).collect());}
-    fn save_license(&self)->Result<()>{ensure!(self.fields[DEVICE].text().trim().is_empty(),"Klik eerst op + om het ingevoerde apparaat toe te voegen, of maak het apparaatveld leeg");let mut s=self.snapshot()?;let mut e=self.selected.get().and_then(|id|s.entries.iter().find(|e|e.id==id).cloned()).unwrap_or_else(||Entry::new("license",""));e.name=self.fields[NAME].text().trim().into();e.code=self.fields[CODE].text();e.software_version=self.fields[VERSION].text();e.owner_id=self.owner.selection().and_then(|i|self.people_ids.borrow().get(i).copied()).or(e.owner_id);let expiry=self.fields[EXPIRY].text();e.expires=if expiry.trim().is_empty(){None}else{Some(chrono::NaiveDate::parse_from_str(expiry.trim(),"%Y-%m-%d").context("Gebruik jjjj-mm-dd")?)};e.notes=self.notes.text();e.installations=self.draft_installs.borrow().clone();let id=e.id;s.edit(e)?;self.selected.set(Some(id));self.commit(s)}
+    fn save_license(&self)->Result<()>{ensure!(self.fields[DEVICE].text().trim().is_empty(),"Klik eerst op Voeg toe om het ingevoerde apparaat toe te voegen, of maak het apparaatveld leeg");let mut s=self.snapshot()?;let mut e=self.selected.get().and_then(|id|s.entries.iter().find(|e|e.id==id).cloned()).unwrap_or_else(||Entry::new("license",""));e.name=self.fields[NAME].text().trim().into();e.code=self.fields[CODE].text();e.software_version=self.fields[VERSION].text();e.owner_id=self.owner.selection().and_then(|i|self.people_ids.borrow().get(i).copied()).or(e.owner_id);let expiry=self.fields[EXPIRY].text();e.expires=if expiry.trim().is_empty(){None}else{Some(chrono::NaiveDate::parse_from_str(expiry.trim(),"%Y-%m-%d").context("Gebruik jjjj-mm-dd")?)};e.notes=self.notes.text();e.installations=self.draft_installs.borrow().clone();let id=e.id;s.edit(e)?;self.selected.set(Some(id));self.commit(s)}
     fn delete_license(&self)->Result<()>{let mut s=self.snapshot()?;let id=self.selected.get().context("Selecteer een licentie")?;if !self.confirm("Deze licentie verwijderen, ook op de server na synchronisatie?"){return Ok(());}let mut e=s.entries.iter().find(|e|e.id==id).context("Record ontbreekt")?.clone();e.deleted=true;s.edit(e)?;self.selected.set(None);self.commit(s)}
     fn edit_person(&self,action:usize)->Result<()>{let mut s=self.snapshot()?;let id=self.people.selection().filter(|i|*i>0).and_then(|i|self.people_ids.borrow().get(i-1).copied());let mut p=if action==ADDPERSON{Entry::new("person","")}else{s.entries.iter().find(|e|Some(e.id)==id).context("Selecteer eerst een gebruiker")?.clone()};if action==DELPERSON{ensure!(!s.entries.iter().any(|e|e.kind=="license"&&!e.deleted&&e.owner_id==Some(p.id)),"Verplaats of verwijder eerst de licenties van deze gebruiker");if !self.confirm("Gebruiker verwijderen?"){return Ok(());}p.deleted=true;}else{p.name=self.fields[PERSON].text().trim().into();ensure!(!s.entries.iter().any(|e|e.kind=="person"&&!e.deleted&&e.id!=p.id&&e.name.to_lowercase()==p.name.to_lowercase()),"Deze gebruiker bestaat al");}s.edit(p)?;self.commit(s)}
     fn begin_work(&self,login:bool)->Result<()> {

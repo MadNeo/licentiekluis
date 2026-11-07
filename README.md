@@ -1,6 +1,6 @@
 # LicentieKluis
 
-Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Web/server en Windows 0.7.0 met GitHub-installatie en upgradefunctie. De Windowsclient heeft een eigen versienummer.
+Native Rust Windowsclient en .NET 10-server met webportaal voor licenties per gebruiker, platform en apparaat. Offline opslag, synchronisatie, conflictafhandeling en meerdere licentiecodes per e-mail. Dit pakket bevat de broncode voor Windows 0.9.0 en web/server 0.7.2.
 
 ## Server installeren in Proxmox-LXC
 
@@ -15,6 +15,10 @@ De wizard maakt een Ubuntu 24.04-container en installeert Caddy, .NET 10 en de a
 Heb je al een geschikte lege container, dan kun je daar als root `scripts/install-lxc.sh` uitvoeren. Gebruik bij een bestaande LicentieKluis-installatie altijd `upgrade`.
 
 Open daarna `https://<IP-of-DNS-naam>/` en vertrouw het Caddy-CA-certificaat op je apparaat. Het webportaal ondersteunt gebruikers- en licentiebeheer, installatiegegevens, filters, codeweergave, e-mail, versleutelde back-up/herstel en revisieconflicten. Zie [de webhandleiding](docs/WEB-BEHEER.md). Bestaande gegevens en synchronisatie met Windows blijven behouden. Voor zelfstandig offline gebruik blijft de Windows-app beschikbaar.
+
+## Webapp draaien op Railway
+
+Zie [Railway-installatie](docs/RAILWAY.md) voor de container, blijvende opslag en de eerste aanmelding.
 
 ## Bijwerken
 

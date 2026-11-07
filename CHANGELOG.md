@@ -1,5 +1,17 @@
 # LicentieKluis — wijzigingen
 
+## Windows 0.9.0
+
+- Vaste plek voor Nieuwe licentie boven de lijst en voor Opslaan rechtsonder in het detailpaneel.
+- Aparte onderdelen voor gebruikersbeheer, installatiegegevens en synchronisatiestatus.
+- De lijst toont de versie en hoeveel licenties zichtbaar zijn. Zoeken herkent software, versie en apparaatnaam.
+
+## Web 0.7.2
+
+- Eén primaire knop voor het maken van licenties en gegroepeerde beheeracties.
+- Zoeken op softwareversie, filters voor geldigheid en een knop om alle filters te wissen.
+- Containerconfiguratie voor Railway met een controle op permanente opslag.
+
 ## Windows 0.8.0 — 6 november 2026
 
 - Rustigere panelen, afgeronde actieknoppen en duidelijk herkenbare hoofdacties.

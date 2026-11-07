@@ -1,0 +1,11 @@
+**
+!Directory.Build.props
+!CHANGELOG.md
+!Shared/
+!Shared/**
+!Server/
+!Server/**
+!scripts/
+!scripts/start-railway.sh
+**/bin/
+**/obj/
