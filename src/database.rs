@@ -7,7 +7,13 @@ use zeroize::Zeroizing;
 use crate::{model::LocalState, vault};
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Credentials { pub url:String, pub user:String, pub password:String }
+pub struct Credentials {
+    pub url: String,
+    pub user: String,
+    pub password: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_ca: Option<Vec<u8>>,
+}
 impl Drop for Credentials { fn drop(&mut self) { use zeroize::Zeroize; self.password.zeroize(); } }
 
 fn connect(path:&Path)->Result<Connection> {
@@ -63,7 +69,7 @@ pub fn migrate(path:&Path,legacy:&Path,password:&str)->Result<()> {
     let d=tempfile::tempdir().unwrap();let p=d.path().join("vault.db");
     let mut s=LocalState::default();s.edit(crate::model::Entry::new("person","SECRET-PERSON-123")).unwrap();
     save(&p,&s,"test-password").unwrap();
-    remember(&p,&Credentials{url:"https://example.test/".into(),user:"account".into(),password:"SECRET-SERVER-PASSWORD".into()},"test-password").unwrap();
+    remember(&p,&Credentials{url:"https://example.test/".into(),user:"account".into(),password:"SECRET-SERVER-PASSWORD".into(),server_ca:None},"test-password").unwrap();
     assert_eq!(load(&p,"test-password").unwrap().entries[0].name,"SECRET-PERSON-123");
     assert_eq!(credentials(&p,"test-password").unwrap().unwrap().user,"account");
     let bytes=std::fs::read(&p).unwrap();
@@ -71,6 +77,11 @@ pub fn migrate(path:&Path,legacy:&Path,password:&str)->Result<()> {
     assert!(load(&p,"wrong").is_err());
     assert_eq!(load(&p,"test-password").unwrap().pending.len(),1);
     forget(&p).unwrap();assert!(credentials(&p,"test-password").unwrap().is_none());
+ }
+ #[test] fn old_connection_settings_remain_readable() {
+    let data = r#"{"url":"https://server.test/","user":"account","password":"test-password"}"#;
+    let credentials: Credentials = serde_json::from_str(data).unwrap();
+    assert!(credentials.server_ca.is_none());
  }
  #[test] fn migration_keeps_legacy_and_never_overwrites_database() {
     let d=tempfile::tempdir().unwrap();let old=d.path().join("vault.lkv");let db=d.path().join("vault.db");

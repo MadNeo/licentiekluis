@@ -1,5 +1,11 @@
 # LicentieKluis — wijzigingen
 
+## Windows 0.9.1
+
+- Voeg het publieke CA-certificaat van een lokale Caddy-server toe in Verbinding & back-up.
+- Het CA-certificaat geldt alleen voor het opgeslagen serveradres. Aanmelden, synchroniseren, afmelden en mailen gebruiken dezelfde TLS-instellingen.
+- Windows meldt een onbekende CA of een afwijkend serveradres in gewone taal.
+
 ## Windows 0.9.0
 
 - Vaste plek voor Nieuwe licentie boven de lijst en voor Opslaan rechtsonder in het detailpaneel.

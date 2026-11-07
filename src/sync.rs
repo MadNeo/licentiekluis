@@ -1,26 +1,73 @@
-use anyhow::{ensure,Result};
+use anyhow::{ensure, Context, Result};
+use sha2::{Digest, Sha256};
+use std::time::Duration;
 use crate::model::{LocalState,SyncResponse};
 use serde::Deserialize;
 use reqwest::blocking::Client;
 use uuid::Uuid;
 
-#[derive(Clone)] pub struct Session {pub url:String,pub token:String,pub vault_id:Uuid}
+#[derive(Clone)] pub struct Session {pub url:String,pub token:String,pub vault_id:Uuid, server_ca:Option<Vec<u8>>}
 #[derive(Deserialize)] #[serde(rename_all="camelCase")] struct LoginResponse {token:String,vault_id:Uuid}
-fn client()->Result<Client>{Ok(Client::builder().connect_timeout(std::time::Duration::from_secs(5)).timeout(std::time::Duration::from_secs(15)).redirect(reqwest::redirect::Policy::none()).build()?)}
-pub fn login(url:&str,user:&str,password:&str)->Result<Session>{
-    let u=reqwest::Url::parse(url)?;ensure!(u.scheme()=="https"&&u.username().is_empty()&&u.password().is_none()&&u.path()=="/"&&u.query().is_none()&&u.fragment().is_none(),"Gebruik een HTTPS-adres zonder pad of accountgegevens");
-    let url=u.to_string();let r=client()?.post(format!("{}api/login",url)).json(&serde_json::json!({"username":user,"password":password})).send()?;
-    ensure!(r.status().is_success(),"Aanmelden mislukt (HTTP {}); controleer account of wacht een minuut",r.status());let data:LoginResponse=r.json()?;Ok(Session{url,token:data.token,vault_id:data.vault_id})
+pub fn server_url(input: &str) -> Result<String> {
+    let url = reqwest::Url::parse(input.trim())?;
+    ensure!(url.scheme() == "https" && url.username().is_empty() && url.password().is_none()
+        && url.path() == "/" && url.query().is_none() && url.fragment().is_none(),
+        "Gebruik een HTTPS-adres zonder pad of accountgegevens");
+    Ok(url.to_string())
+}
+
+pub fn parse_server_ca(bytes: &[u8]) -> Result<(Vec<u8>, String)> {
+    let certificate = if bytes.starts_with(b"-----BEGIN CERTIFICATE-----") {
+        native_tls::Certificate::from_pem(bytes)
+    } else {
+        native_tls::Certificate::from_der(bytes)
+    }.context("Kies het publieke CA-certificaat van je eigen server (.crt, .cer of .pem)")?;
+    let der = certificate.to_der()?;
+    let fingerprint = Sha256::digest(&der).iter()
+        .map(|byte| format!("{byte:02X}")).collect::<Vec<_>>().join(":");
+    Ok((der, fingerprint))
+}
+
+fn client(server_ca: Option<&[u8]>, timeout: u64) -> Result<Client> {
+    let mut builder = Client::builder().connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(timeout)).redirect(reqwest::redirect::Policy::none());
+    if let Some(der) = server_ca {
+        builder = builder.tls_built_in_root_certs(false)
+            .add_root_certificate(reqwest::Certificate::from_der(der)?);
+    }
+    Ok(builder.build()?)
+}
+
+fn request_error(error: reqwest::Error) -> anyhow::Error {
+    let error = anyhow::Error::new(error);
+    let detail = format!("{error:#}");
+    if ["-2146762487", "-2146762486"].iter().any(|code| detail.contains(code)) {
+        return anyhow::anyhow!("Server-CA niet vertrouwd. Kies bij Verbinding & back-up het CA-certificaat van je eigen server.");
+    }
+    if detail.contains("-2146762481") {
+        return anyhow::anyhow!("Het serveradres komt niet overeen met het certificaat. Gebruik het HTTPS-adres dat bij de installatie is ingesteld.");
+    }
+    error
+}
+
+pub fn login(url: &str, user: &str, password: &str, server_ca: Option<&[u8]>) -> Result<Session> {
+    let url = server_url(url)?;
+    let response = client(server_ca, 15)?.post(format!("{url}api/login"))
+        .json(&serde_json::json!({"username":user,"password":password})).send().map_err(request_error)?;
+    ensure!(response.status().is_success(),
+        "Aanmelden mislukt (HTTP {}); controleer account of wacht een minuut", response.status());
+    let data: LoginResponse = response.json()?;
+    Ok(Session { url, token: data.token, vault_id: data.vault_id, server_ca: server_ca.map(<[u8]>::to_vec) })
 }
 pub fn synchronize(state:&mut LocalState,session:&Session)->Result<()> {
     ensure!(state.conflicts.is_empty(),"Los eerst de conflicten op");let mut next=state.clone();next.bind(session.url.clone(),session.vault_id)?;
-    let r=client()?.post(format!("{}api/sync",session.url)).bearer_auth(&session.token).json(&next.request()?).send()?;
+    let r=client(session.server_ca.as_deref(), 15)?.post(format!("{}api/sync",session.url)).bearer_auth(&session.token).json(&next.request()?).send().map_err(request_error)?;
     ensure!(r.status().is_success(),"Synchronisatie mislukt (HTTP {}). Bij 401 opnieuw aanmelden",r.status());let response:SyncResponse=r.json()?;next.merge(response)?;*state=next;Ok(())
 }
-pub fn logout(session:&Session){if let Ok(c)=client(){let _=c.post(format!("{}api/logout",session.url)).bearer_auth(&session.token).send();}}
+pub fn logout(session:&Session){if let Ok(c)=client(session.server_ca.as_deref(), 15){let _=c.post(format!("{}api/logout",session.url)).bearer_auth(&session.token).send();}}
 pub fn send_mail(session:&Session,request:&crate::mail::Request)->Result<crate::mail::Outcome>{
-    let c=Client::builder().timeout(std::time::Duration::from_secs(45)).redirect(reqwest::redirect::Policy::none()).build()?;
-    let r=c.post(format!("{}api/mail/send",session.url)).bearer_auth(&session.token).json(request).send()?;
+    let c=client(session.server_ca.as_deref(), 45)?;
+    let r=c.post(format!("{}api/mail/send",session.url)).bearer_auth(&session.token).json(request).send().map_err(request_error)?;
     let status=r.status();let data:serde_json::Value=r.json()?;
     ensure!(status.is_success(),"{}",data.get("error").and_then(|e|e.as_str()).unwrap_or("Verzending niet bevestigd; controleer ontvangst voordat je opnieuw probeert"));
     Ok(serde_json::from_value(data)?)
@@ -29,13 +76,21 @@ pub fn send_mail(session:&Session,request:&crate::mail::Request)->Result<crate::
 #[cfg(test)] mod tests {
     use super::*;
     use std::{net::TcpListener,io::{Read,Write}};
+    #[test] fn validates_connection_and_rejects_invalid_ca() {
+        assert_eq!(server_url(" https://192.168.178.198 ").unwrap(), "https://192.168.178.198/");
+        for url in ["http://host.test", "https://host.test/api", "https://user@host.test", "https://host.test/?query=1"] {
+            assert!(server_url(url).is_err());
+        }
+        assert!(parse_server_ca(b"not a certificate").is_err());
+    }
+
     #[test] fn outage_preserves_local_database_and_recovery_syncs_pending() {
         let dir=tempfile::tempdir().unwrap();let path=dir.path().join("vault.db");
         let mut state=LocalState::default();
         let person=crate::model::Entry::new("person","Offline user");state.edit(person.clone()).unwrap();
         crate::database::save(&path,&state,"local-password").unwrap();
         let listener=TcpListener::bind("127.0.0.1:0").unwrap();let address=listener.local_addr().unwrap();drop(listener);
-        let session=Session{url:format!("http://{address}/"),token:"test-only".into(),vault_id:Uuid::new_v4()};
+        let session=Session{url:format!("http://{address}/"),token:"test-only".into(),vault_id:Uuid::new_v4(),server_ca:None};
         assert!(synchronize(&mut state,&session).is_err());
         assert_eq!(state.pending.len(),1);assert!(state.vault_id.is_none());
         state=crate::database::load(&path,"local-password").unwrap();
