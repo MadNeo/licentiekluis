@@ -1,6 +1,6 @@
 [package]
 name = "licentiekluis-native"
-version = "0.9.1"
+version = "0.9.3"
 edition = "2021"
 license = "MIT"
 description = "Native Windows license vault with offline encrypted storage"

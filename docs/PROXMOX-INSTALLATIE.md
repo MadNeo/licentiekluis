@@ -59,6 +59,14 @@ Import-Certificate -FilePath "$env:USERPROFILE\Downloads\licentiekluis-ca.crt" -
 
 Vertrouw alleen de CA van je eigen installatie. Daarna kun je de HTTPS-webpagina openen zonder certificaatwaarschuwing en hetzelfde adres gebruiken in de Windowsapp. Log in met het **serveraccount**, niet automatisch met de LXC-rootlogin.
 
+### Tijdelijke modus voor lokale verbindingen (Windows 0.9.2)
+
+Bij bestaande verbindingen met een lokaal IP-adres staat de certificaatcontrole aanvankelijk uit. HTTPS versleutelt het verkeer, terwijl de identiteit van de server tijdelijk ongecontroleerd blijft. Deze modus geldt voor private IP-adressen, loopback, link-local en localhost.
+
+Gebruik je bestaande HTTPS-adres, bijvoorbeeld `https://192.168.178.198`. Ontgrendel de kluis en klik zo nodig op **Synchroniseren**. Er is voor deze tijdelijke modus geen certificaatbestand nodig.
+
+Zet de controle later aan via **Instellingen → Certificaatcontrole UIT**. De keuze blijft bewaard na herstart. Het importeren van een CA-certificaat zet de controle ook aan. Bij een publiek adres is controle altijd ingeschakeld.
+
 ### Alleen binnen LicentieKluis vertrouwen (Windows 0.9.1)
 
 Gebruik het publieke `licentiekluis-ca.crt` van je eigen LXC. Bij installatie via Proxmox staat er ook een kopie in `/root/licentiekluis-CTID-ca.crt` op de host. Controleer in de LXC-console de vingerafdruk:
@@ -67,7 +75,7 @@ Gebruik het publieke `licentiekluis-ca.crt` van je eigen LXC. Bij installatie vi
 openssl x509 -in /root/licentiekluis-ca.crt -noout -fingerprint -sha256
 ```
 
-Ontgrendel de lokale kluis en open **Verbinding & back-up**. Gebruik het HTTPS-adres dat bij de installatie is ingesteld. Als er nog geen verbinding opgeslagen is, klik dan eerst op **Aanmelden** met je serveraccount. Ook bij een certificaatmelding bewaart de app de verbinding voor de volgende poging.
+Ontgrendel de lokale kluis en open **Instellingen**. Gebruik het HTTPS-adres dat bij de installatie is ingesteld. Als er nog geen verbinding opgeslagen is, klik dan eerst op **Aanmelden** met je serveraccount. Ook bij een certificaatmelding bewaart de app de verbinding voor de volgende poging.
 
 Klik op **CA-certificaat kiezen**, selecteer het gekopieerde bestand en vergelijk de SHA-256-vingerafdruk. Bevestig alleen als die overeenkomt. De app probeert meteen opnieuw te synchroniseren. Met **CA-certificaat wissen** gebruik je weer het Windows-certificaatarchief.
 
@@ -95,3 +103,7 @@ pct exec 102 -- journalctl -u systemd-networkd -u licentiekluis -u caddy -n 80 -
 Bij een fout blijft de container staan. Tijdelijke wachtwoordbestanden worden opgeruimd wanneer de container reageert. Na een abrupte hostonderbreking: verwijder `/root/licentiekluis-init.txt` en `/root/licentiekluis-root.txt` in de container zodra je weer toegang hebt.
 
 Automatische tests simuleren Proxmox, netwerkuitval, HTTPS-uitval, rootwachtwoordoverdracht, hervatten en het weigeren van bestaande data. Deze tests vervangen geen volledige installatie op jouw Proxmox-host.
+
+## E-mail via Instellingen
+
+Vanaf web 0.8.0: log in op het webportaal, open **Instellingen → E-mail**, sla je SMTP-gegevens op en verstuur een testmail. Er is geen configuratiescript of serverherstart nodig. Bestaande SMTP-instellingen worden automatisch overgenomen. Zie [webbeheer](WEB-BEHEER.md#instellingen-web-080).
