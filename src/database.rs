@@ -13,6 +13,8 @@ pub struct Credentials {
     pub password: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_ca: Option<Vec<u8>>,
+    #[serde(default)]
+    pub verify_certificate: bool,
 }
 impl Drop for Credentials { fn drop(&mut self) { use zeroize::Zeroize; self.password.zeroize(); } }
 
@@ -69,7 +71,7 @@ pub fn migrate(path:&Path,legacy:&Path,password:&str)->Result<()> {
     let d=tempfile::tempdir().unwrap();let p=d.path().join("vault.db");
     let mut s=LocalState::default();s.edit(crate::model::Entry::new("person","SECRET-PERSON-123")).unwrap();
     save(&p,&s,"test-password").unwrap();
-    remember(&p,&Credentials{url:"https://example.test/".into(),user:"account".into(),password:"SECRET-SERVER-PASSWORD".into(),server_ca:None},"test-password").unwrap();
+    remember(&p,&Credentials{url:"https://example.test/".into(),user:"account".into(),password:"SECRET-SERVER-PASSWORD".into(),server_ca:None,verify_certificate:false},"test-password").unwrap();
     assert_eq!(load(&p,"test-password").unwrap().entries[0].name,"SECRET-PERSON-123");
     assert_eq!(credentials(&p,"test-password").unwrap().unwrap().user,"account");
     let bytes=std::fs::read(&p).unwrap();
@@ -82,6 +84,20 @@ pub fn migrate(path:&Path,legacy:&Path,password:&str)->Result<()> {
     let data = r#"{"url":"https://server.test/","user":"account","password":"test-password"}"#;
     let credentials: Credentials = serde_json::from_str(data).unwrap();
     assert!(credentials.server_ca.is_none());
+    assert!(!credentials.verify_certificate);
+ }
+ #[test] fn certificate_preference_survives_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("vault.db");
+    let mut credentials = Credentials {
+        url: "https://192.168.178.198/".into(), user: "test".into(),
+        password: "test-password".into(), server_ca: None, verify_certificate: false,
+    };
+    remember(&path, &credentials, "local-password").unwrap();
+    assert!(!super::credentials(&path, "local-password").unwrap().unwrap().verify_certificate);
+    credentials.verify_certificate = true;
+    remember(&path, &credentials, "local-password").unwrap();
+    assert!(super::credentials(&path, "local-password").unwrap().unwrap().verify_certificate);
  }
  #[test] fn migration_keeps_legacy_and_never_overwrites_database() {
     let d=tempfile::tempdir().unwrap();let old=d.path().join("vault.lkv");let db=d.path().join("vault.db");

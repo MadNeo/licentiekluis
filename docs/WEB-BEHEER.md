@@ -63,3 +63,20 @@ curl -fsSL https://raw.githubusercontent.com/MadNeo/licentiekluis/main/scripts/i
 Laat de GitHub-tokenvraag leeg voor de openbare repository. De procedure registreert eerst het commando en begint daarna aan de update. Database en instellingen blijven behouden. Dit is een upgrade, geen nieuwe installatie. Een bestaande LicentieKluis-service is vereist.
 
 Controle achteraf: `upgrade --help`. Voortaan volstaat `upgrade`. De registratie beschermt andere bestaande commando's met dezelfde naam en biedt ook toegang via `/usr/bin/upgrade` als `/usr/local/bin` ontbreekt in PATH.
+
+## Instellingen (web 0.8.0)
+
+Open **Instellingen** in de bovenste navigatie. De pagina bevat E-mail, Weergave, Back-up en herstel, en Serverinformatie. Je blijft aangemeld bij het wisselen tussen licenties en instellingen. Een directe link naar `/settings` vraagt eerst om je serveraccount.
+
+### E-mail instellen zonder scripts
+
+1. Vul SMTP-host, STARTTLS-poort (meestal 587) en afzenderadres in.
+2. Vul de SMTP-gebruikersnaam en het wachtwoord of app-wachtwoord in. Schakel aanmelding alleen uit als je een vertrouwde relay gebruikt. Poort 465 en OAuth worden nog niet ondersteund.
+3. Kies **Instellingen opslaan**. De server gebruikt deze direct, ook voor e-mail vanuit Windows. Er is geen herstart nodig.
+4. Vul je eigen adres in onder **Controleer met een testmail** en kies **Testmail versturen**. Controleer inbox en ongewenste mail. Er worden geen licenties meegestuurd.
+
+Een opgeslagen wachtwoord wordt nooit teruggestuurd naar de browser. Laat het wachtwoordveld leeg om het te behouden. Bij wijziging van host, poort of gebruikersnaam moet je het wachtwoord opnieuw invoeren. Gelijktijdige wijzigingen worden gemeld, zodat je geen instellingen van een andere sessie overschrijft.
+
+Bij een onzekere testmailstatus controleer je eerst je inbox. De knop **Status opnieuw controleren** hergebruikt hetzelfde verzoeknummer en voorkomt opnieuw versturen als de server het bericht al heeft aangeboden. Een nieuw testmailverzoek verstuurt bewust een nieuw bericht.
+
+Bestaande `smtp.lkv`-instellingen worden automatisch gelezen en blijven versleuteld opgeslagen. Het oude configuratiescript blijft beschikbaar voor bestaande installaties, maar is niet nodig voor instellingenbeheer. Na een eenmalige update naar web 0.8.0 regel je dit via de pagina.

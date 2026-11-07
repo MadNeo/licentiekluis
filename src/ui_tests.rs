@@ -86,7 +86,9 @@ fn native_windows_show_text_and_unobstructed_controls() {
         snapshot(app.window.handle.hwnd().unwrap(), &screenshots.join("01-main.bmp"),false);
         paint_now(&app.settings_window);
         for field in &app.fields[URL..] { reachable(&field.handle); }
-        for index in [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE,IMPORT_CA,REMOVE_CA] { reachable(&app.buttons[index].handle); }
+        for index in [LOGIN,SYNC,LOGOUT,CONFLICT,BACKUP,RESTORE,IMPORT_CA,REMOVE_CA,TLS_CHECK,SERVER_SETTINGS] { reachable(&app.buttons[index].handle); }
+        reachable(&app.theme_button.handle);
+        assert_eq!(GetParent(app.theme_button.handle.hwnd().unwrap()), app.settings_window.handle.hwnd().unwrap());
         snapshot(app.settings_window.handle.hwnd().unwrap(), &screenshots.join("02-settings.bmp"),false);
         app.event(nwg::Event::OnButtonClick,app.theme_button.handle.clone());
         assert!(app.theme.dark.get());assert!(theme::Theme::new(&app.theme_path).dark.get());
@@ -102,7 +104,9 @@ fn native_windows_show_text_and_unobstructed_controls() {
         for handle in [&app.mail_licenses.handle,&app.mail_to.handle,&app.mail_subject.handle,&app.mail_preview.handle] { reachable(handle); }
         snapshot(app.mail_window.handle.hwnd().unwrap(), &screenshots.join("05-mail-dark.bmp"),true);
         app.mail_window.set_visible(false);paint_now(&app.window);snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("06-main-dark.bmp"),true);
-        reachable(&app.theme_button.handle);assert_eq!(app.tabs.tab_count(),2);
+        reachable(&app.buttons[SETTINGS].handle);
+        assert_eq!(IsWindowVisible(app.theme_button.handle.hwnd().unwrap()), 0, "Theme control belongs to the closed settings window");
+        assert_eq!(app.tabs.tab_count(),2);
         app.tabs.set_selected_tab(1);app.event(nwg::Event::TabsContainerChanged,app.tabs.handle.clone());paint_now(&app.window);
         reachable(&app.changelog.handle);assert!(app.changelog.text().contains(env!("CARGO_PKG_VERSION")));assert_eq!(IsWindowVisible(app.fields[NAME].handle.hwnd().unwrap()),0);
         snapshot(app.window.handle.hwnd().unwrap(),&screenshots.join("07-changelog-dark.bmp"),true);
